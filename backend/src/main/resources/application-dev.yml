@@ -1,0 +1,7 @@
+# Development profile configuration
+# Activate with: spring.profiles.active=dev
+
+management:
+  endpoint:
+    health:
+      show-details: always  # Show detailed health info in dev
