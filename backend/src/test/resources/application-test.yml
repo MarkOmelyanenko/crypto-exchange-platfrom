@@ -1,0 +1,26 @@
+# Test profile configuration
+# Used during Maven test execution
+# Services are started via docker-compose before tests run
+# Uses environment variables so it works both locally and in CI
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5434/${POSTGRES_DB:-crypto_exchange_test}}
+    username: ${SPRING_DATASOURCE_USERNAME:${POSTGRES_USER:-postgres}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${POSTGRES_PASSWORD:-postgres}}
+  
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6381}
+  
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
+
+# Disable health checks during tests to speed up startup
+management:
+  health:
+    redis:
+      enabled: false
+    kafka:
+      enabled: false

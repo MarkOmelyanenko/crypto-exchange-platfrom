@@ -16,6 +16,10 @@ services:
       - ${PWD}/..:/workspace:ro
     environment:
       - JENKINS_OPTS=--httpPort=8080
+    extra_hosts:
+      # Add host.docker.internal for accessing host services (works on Mac/Windows)
+      # On Linux, this will be resolved to the host gateway IP
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     networks:
       - jenkins-network

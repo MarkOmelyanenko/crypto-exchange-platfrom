@@ -17,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @Transactional
+@org.springframework.test.context.ActiveProfiles("test")
 @TestPropertySource(properties = {
     "spring.flyway.enabled=true",
     "spring.jpa.hibernate.ddl-auto=validate"

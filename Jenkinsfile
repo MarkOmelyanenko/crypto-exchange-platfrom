@@ -16,6 +16,11 @@ pipeline {
         // Docker image names
         BACKEND_IMAGE = 'crypto-exchange-backend:latest'
         FRONTEND_IMAGE = 'crypto-exchange-frontend:latest'
+        // Test environment variables (will be set in script)
+        POSTGRES_DB = 'crypto_exchange_test'
+        POSTGRES_USER = 'postgres'
+        POSTGRES_PASSWORD = 'postgres'
+        SPRING_PROFILES_ACTIVE = 'test'
     }
     
     stages {
@@ -29,6 +34,116 @@ pipeline {
                         sh 'pwd && ls -la'
                     }
                 }
+            }
+        }
+        
+        stage('Backend: Start Test Services') {
+            steps {
+                script {
+                    // Detect host IP for accessing services from Jenkins container
+                    def testHost = sh(
+                        script: '''
+                            # Try host.docker.internal first (works on Mac/Windows Docker Desktop)
+                            if ping -c 1 -W 1 host.docker.internal > /dev/null 2>&1; then
+                                echo "host.docker.internal"
+                            else
+                                # For Linux, get the host IP from the default gateway
+                                # This is the IP of the Docker host from the container's perspective
+                                ip route show default | awk '/default/ {print $3}' | head -1
+                            fi
+                        ''',
+                        returnStdout: true
+                    ).trim()
+                    
+                    if (!testHost) {
+                        testHost = "localhost"
+                    }
+                    
+                    env.TEST_HOST = testHost
+                    env.SPRING_DATASOURCE_URL = "jdbc:postgresql://${testHost}:5434/crypto_exchange_test"
+                    env.SPRING_DATASOURCE_USERNAME = "postgres"
+                    env.SPRING_DATASOURCE_PASSWORD = "postgres"
+                    env.REDIS_HOST = testHost
+                    env.REDIS_PORT = "6381"
+                    env.KAFKA_BOOTSTRAP_SERVERS = "${testHost}:9094"
+                    
+                    echo "Using test host: ${testHost}"
+                    echo "PostgreSQL URL: ${env.SPRING_DATASOURCE_URL}"
+                    echo "Redis: ${env.REDIS_HOST}:${env.REDIS_PORT}"
+                    echo "Kafka: ${env.KAFKA_BOOTSTRAP_SERVERS}"
+                }
+                sh '''
+                    echo "Starting test services (PostgreSQL, Redis, Kafka)..."
+                    docker-compose -f devops/docker-compose.test.yml up -d
+                    
+                    echo "Waiting for services to be healthy..."
+                    # Wait for PostgreSQL (up to 60 seconds)
+                    timeout=60
+                    elapsed=0
+                    while [ $elapsed -lt $timeout ]; do
+                        if docker exec test-postgres pg_isready -U postgres > /dev/null 2>&1; then
+                            echo "✓ PostgreSQL is ready"
+                            break
+                        fi
+                        sleep 2
+                        elapsed=$((elapsed + 2))
+                    done
+                    if [ $elapsed -ge $timeout ]; then
+                        echo "✗ PostgreSQL failed to start"
+                        docker logs test-postgres
+                        exit 1
+                    fi
+                    
+                    # Wait for Redis
+                    elapsed=0
+                    while [ $elapsed -lt $timeout ]; do
+                        if docker exec test-redis redis-cli ping > /dev/null 2>&1; then
+                            echo "✓ Redis is ready"
+                            break
+                        fi
+                        sleep 2
+                        elapsed=$((elapsed + 2))
+                    done
+                    if [ $elapsed -ge $timeout ]; then
+                        echo "✗ Redis failed to start"
+                        docker logs test-redis
+                        exit 1
+                    fi
+                    
+                    # Wait for Zookeeper
+                    elapsed=0
+                    while [ $elapsed -lt $timeout ]; do
+                        if docker exec test-zookeeper nc -z localhost 2181 > /dev/null 2>&1; then
+                            echo "✓ Zookeeper is ready"
+                            break
+                        fi
+                        sleep 2
+                        elapsed=$((elapsed + 2))
+                    done
+                    if [ $elapsed -ge $timeout ]; then
+                        echo "✗ Zookeeper failed to start"
+                        docker logs test-zookeeper
+                        exit 1
+                    fi
+                    
+                    # Wait for Kafka (needs Zookeeper to be ready first)
+                    elapsed=0
+                    while [ $elapsed -lt $timeout ]; do
+                        if docker exec test-kafka kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1; then
+                            echo "✓ Kafka is ready"
+                            break
+                        fi
+                        sleep 2
+                        elapsed=$((elapsed + 2))
+                    done
+                    if [ $elapsed -ge $timeout ]; then
+                        echo "✗ Kafka failed to start"
+                        docker logs test-kafka
+                        exit 1
+                    fi
+                    
+                    echo "All test services are ready"
+                '''
             }
         }
         
@@ -47,6 +162,11 @@ pipeline {
                     dir('backend') {
                         junit 'target/surefire-reports/*.xml'
                     }
+                    // Always tear down test services
+                    sh '''
+                        echo "Stopping test services..."
+                        docker-compose -f devops/docker-compose.test.yml down -v
+                    '''
                 }
             }
         }
