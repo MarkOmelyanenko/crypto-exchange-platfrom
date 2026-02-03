@@ -7,6 +7,7 @@ help: ## Show this help message
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 jenkins-up: ## Start Jenkins CI server
+	cd devops/jenkins && docker-compose -f docker-compose.jenkins.yml build
 	cd devops/jenkins && docker-compose -f docker-compose.jenkins.yml up -d
 	@echo "Jenkins is starting..."
 	@echo "Access Jenkins at http://localhost:8081"

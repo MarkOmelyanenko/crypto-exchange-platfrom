@@ -15,10 +15,13 @@ This directory contains the Jenkins infrastructure for local and remote CI usage
    cd devops/jenkins
    ```
 
-2. Start Jenkins:
+2. Build and start Jenkins:
    ```bash
+   docker-compose -f docker-compose.jenkins.yml build
    docker-compose -f docker-compose.jenkins.yml up -d
    ```
+   
+   **Note**: The first time will build a custom Jenkins image with Docker CLI and docker-compose installed. This may take a few minutes.
 
 3. Get the initial admin password:
    ```bash

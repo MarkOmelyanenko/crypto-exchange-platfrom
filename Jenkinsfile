@@ -4,10 +4,10 @@ pipeline {
     tools {
         // These tools should be configured in Jenkins: Manage Jenkins -> Tools
         // For Maven: Add Maven installation (e.g., version 3.9.x)
-        // For JDK: Add JDK installation (e.g., Java 21)
-        // If tools are not configured, you can use docker agents or install tools in pipeline
+        // For JDK: Add JDK installation (e.g., Java 21) OR use JAVA_HOME environment variable
         maven 'Maven' // Configure in Jenkins Global Tool Configuration
-        jdk 'JDK21'   // Configure in Jenkins Global Tool Configuration
+        // JDK is optional - will use JAVA_HOME if not configured
+        // jdk 'JDK21'   // Uncomment and configure in Jenkins Global Tool Configuration
     }
     
     environment {
@@ -47,13 +47,25 @@ pipeline {
                             if ping -c 1 -W 1 host.docker.internal > /dev/null 2>&1; then
                                 echo "host.docker.internal"
                             else
-                                # For Linux, get the host IP from the default gateway
-                                # This is the IP of the Docker host from the container's perspective
-                                ip route show default | awk '/default/ {print $3}' | head -1
+                                # For Linux, try to get the host IP from the default gateway
+                                # Try ip command first, then fallback to route
+                                if command -v ip > /dev/null 2>&1; then
+                                    ip route show default 2>/dev/null | awk '/default/ {print $3}' | head -1
+                                elif command -v route > /dev/null 2>&1; then
+                                    route -n | awk '/^0.0.0.0/ {print $2}' | head -1
+                                else
+                                    # Last resort: use localhost (may work if services are on same network)
+                                    echo "localhost"
+                                fi
                             fi
                         ''',
                         returnStdout: true
                     ).trim()
+                    
+                    // Fallback to localhost if detection failed
+                    if (!testHost || testHost.isEmpty()) {
+                        testHost = "localhost"
+                    }
                     
                     if (!testHost) {
                         testHost = "localhost"
@@ -74,7 +86,16 @@ pipeline {
                 }
                 sh '''
                     echo "Starting test services (PostgreSQL, Redis, Kafka)..."
-                    docker-compose -f devops/docker-compose.test.yml up -d
+                    # Use docker compose (v2) or fallback to docker-compose
+                    if command -v docker > /dev/null 2>&1 && docker compose version > /dev/null 2>&1; then
+                        docker compose -f devops/docker-compose.test.yml up -d
+                    elif command -v docker-compose > /dev/null 2>&1; then
+                        docker-compose -f devops/docker-compose.test.yml up -d
+                    else
+                        echo "ERROR: Neither 'docker compose' nor 'docker-compose' is available"
+                        echo "Please ensure Docker is installed and accessible in the Jenkins container"
+                        exit 1
+                    fi
                     
                     echo "Waiting for services to be healthy..."
                     # Wait for PostgreSQL (up to 60 seconds)
@@ -151,8 +172,19 @@ pipeline {
             steps {
                 dir('backend') {
                     sh '''
-                        echo "Running Maven tests..."
-                        mvn -B -DskipTests=false clean test
+                        # Check if Java is available
+                        if ! command -v java > /dev/null 2>&1 && [ -z "$JAVA_HOME" ]; then
+                            echo "WARNING: Java not found. Checking if Maven wrapper can provide Java..."
+                        fi
+                        
+                        # Use Maven wrapper if available, otherwise use mvn command
+                        if [ -f "./mvnw" ]; then
+                            echo "Using Maven wrapper..."
+                            ./mvnw -B -DskipTests=false clean test
+                        else
+                            echo "Using system Maven..."
+                            mvn -B -DskipTests=false clean test
+                        fi
                     '''
                 }
             }
@@ -165,7 +197,12 @@ pipeline {
                     // Always tear down test services
                     sh '''
                         echo "Stopping test services..."
-                        docker-compose -f devops/docker-compose.test.yml down -v
+                        # Use docker compose (v2) or fallback to docker-compose
+                        if command -v docker > /dev/null 2>&1 && docker compose version > /dev/null 2>&1; then
+                            docker compose -f devops/docker-compose.test.yml down -v
+                        elif command -v docker-compose > /dev/null 2>&1; then
+                            docker-compose -f devops/docker-compose.test.yml down -v
+                        fi
                     '''
                 }
             }
@@ -176,7 +213,12 @@ pipeline {
                 dir('backend') {
                     sh '''
                         echo "Packaging backend application..."
-                        mvn -B -DskipTests package
+                        # Use Maven wrapper if available, otherwise use mvn command
+                        if [ -f "./mvnw" ]; then
+                            ./mvnw -B -DskipTests package
+                        else
+                            mvn -B -DskipTests package
+                        fi
                     '''
                 }
             }
@@ -249,7 +291,15 @@ pipeline {
                     // Start services using CI docker-compose
                     sh '''
                         echo "Starting services for smoke test..."
-                        docker-compose -f devops/docker-compose.ci.yml up -d
+                        # Use docker compose (v2) or fallback to docker-compose
+                        if command -v docker > /dev/null 2>&1 && docker compose version > /dev/null 2>&1; then
+                            docker compose -f devops/docker-compose.ci.yml up -d
+                        elif command -v docker-compose > /dev/null 2>&1; then
+                            docker-compose -f devops/docker-compose.ci.yml up -d
+                        else
+                            echo "ERROR: Neither 'docker compose' nor 'docker-compose' is available"
+                            exit 1
+                        fi
                     '''
                     
                     // Wait for backend to be healthy
@@ -280,7 +330,12 @@ pipeline {
                     // Always tear down containers
                     sh '''
                         echo "Tearing down test containers..."
-                        docker-compose -f devops/docker-compose.ci.yml down -v
+                        # Use docker compose (v2) or fallback to docker-compose
+                        if command -v docker > /dev/null 2>&1 && docker compose version > /dev/null 2>&1; then
+                            docker compose -f devops/docker-compose.ci.yml down -v
+                        elif command -v docker-compose > /dev/null 2>&1; then
+                            docker-compose -f devops/docker-compose.ci.yml down -v
+                        fi
                     '''
                 }
             }
