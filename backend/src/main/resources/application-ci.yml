@@ -1,0 +1,16 @@
+# CI profile configuration
+# Activate with: spring.profiles.active=ci
+# This profile is used during CI/CD pipeline smoke tests
+
+management:
+  endpoint:
+    health:
+      show-details: always  # Show detailed health info in CI for debugging
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+# Override any production security settings if needed
+# Note: SecurityConfig already allows public access to /actuator/health
+# This profile ensures actuator endpoints are accessible during CI
