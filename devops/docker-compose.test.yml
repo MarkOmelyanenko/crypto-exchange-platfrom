@@ -2,7 +2,7 @@ version: '3.8'
 
 # Test-specific docker-compose for running integration tests
 # Uses different ports to avoid conflicts with local dev and CI smoke tests
-# Uses host network mode so services are accessible from Jenkins container via localhost
+# Services are on a shared network so they can communicate by service name
 
 services:
   postgres:
@@ -19,7 +19,8 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-    network_mode: bridge
+    networks:
+      - test-network
 
   redis:
     image: redis:7
@@ -31,7 +32,8 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-    network_mode: bridge
+    networks:
+      - test-network
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.2
@@ -46,13 +48,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    network_mode: bridge
+    networks:
+      - test-network
 
   kafka:
     image: confluentinc/cp-kafka:7.6.2
     container_name: test-kafka
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy
     ports:
       - "9094:9092"  # Different port to avoid conflicts
     environment:
@@ -70,6 +74,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    network_mode: bridge
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    networks:
+      - test-network
+
+networks:
+  test-network:
+    driver: bridge
