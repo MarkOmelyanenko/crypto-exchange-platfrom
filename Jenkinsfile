@@ -228,7 +228,8 @@ pipeline {
                             # Extract host and port from URL
                             pg_url="${SPRING_DATASOURCE_URL}"
                             if echo "$pg_url" | grep -q "jdbc:postgresql://"; then
-                                pg_conn=$(echo "$pg_url" | sed 's/.*jdbc:postgresql:\/\///' | sed 's/\/.*//')
+                                # Use awk to extract host:port, avoiding sed escaping issues
+                                pg_conn=$(echo "$pg_url" | awk -F'jdbc:postgresql://' '{print $2}' | awk -F'/' '{print $1}' | awk -F'?' '{print $1}')
                                 pg_host=$(echo "$pg_conn" | cut -d: -f1)
                                 pg_port=$(echo "$pg_conn" | cut -d: -f2)
                                 if timeout 5 nc -z "$pg_host" "$pg_port" 2>/dev/null; then
