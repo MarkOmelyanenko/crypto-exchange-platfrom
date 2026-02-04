@@ -365,12 +365,20 @@ pipeline {
                         fi
                     '''
                     
-                    // Wait for backend to be healthy
+                    // Wait for backend to be healthy (give it more time for Flyway migrations)
                     sh '''
                         echo "Waiting for backend to be healthy..."
-                        max_attempts=30
+                        echo "Note: Backend needs time to run Flyway migrations on first startup"
+                        max_attempts=60  # Increased to 2 minutes for migrations
                         attempt=0
                         while [ $attempt -lt $max_attempts ]; do
+                            # Check if backend container is still running
+                            if ! docker ps | grep -q ci-backend; then
+                                echo "Backend container stopped! Checking logs..."
+                                docker logs --tail 50 ci-backend || true
+                                exit 1
+                            fi
+                            
                             if curl -f -s http://localhost:8080/actuator/health > /dev/null 2>&1; then
                                 echo "Backend is UP!"
                                 echo "Health check response:"
@@ -378,11 +386,16 @@ pipeline {
                                 exit 0
                             fi
                             attempt=$((attempt + 1))
-                            echo "Attempt $attempt/$max_attempts: Backend not ready yet, waiting..."
+                            if [ $((attempt % 5)) -eq 0 ]; then
+                                echo "Attempt $attempt/$max_attempts: Backend not ready yet, checking logs..."
+                                docker logs --tail 20 ci-backend || true
+                            else
+                                echo "Attempt $attempt/$max_attempts: Backend not ready yet, waiting..."
+                            fi
                             sleep 2
                         done
                         echo "Backend failed to become healthy within timeout"
-                        echo "Checking container logs..."
+                        echo "Checking full container logs..."
                         docker logs ci-backend || true
                         exit 1
                     '''

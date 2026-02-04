@@ -2,6 +2,14 @@
 # Activate with: spring.profiles.active=ci
 # This profile is used during CI/CD pipeline smoke tests
 
+spring:
+  # Ensure Flyway runs migrations in CI
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration
+
 management:
   endpoint:
     health:
