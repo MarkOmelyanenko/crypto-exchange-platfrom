@@ -12,6 +12,8 @@ import com.cryptoexchange.backend.domain.repository.OrderRepository;
 import com.cryptoexchange.backend.domain.util.MoneyUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -58,19 +60,25 @@ public class OrderService {
             throw new InvalidOrderException("Cannot place order on inactive market: " + market.getSymbol());
         }
         
+        // Apply scale normalization (quantity to baseAsset.scale, price to quoteAsset.scale)
+        BigDecimal normalizedQuantity = MoneyUtils.normalizeWithScaleDown(amount, market.getBaseAsset().getScale());
+        BigDecimal normalizedPrice = price != null 
+            ? MoneyUtils.normalizeWithScaleDown(price, market.getQuoteAsset().getScale())
+            : null;
+        
         // Create order first
-        Order order = new Order(user, market, side, type, price, amount);
+        Order order = new Order(user, market, side, type, normalizedPrice, normalizedQuantity);
         order = orderRepository.save(order);
         
         // Reserve funds based on order side
         try {
             if (side == OrderSide.BUY) {
                 // BUY order: reserve quote currency (e.g., USDT)
-                BigDecimal reservedAmount = MoneyUtils.normalize(price.multiply(amount));
+                BigDecimal reservedAmount = MoneyUtils.normalize(normalizedPrice.multiply(normalizedQuantity));
                 walletService.reserveForOrder(userId, market.getQuoteAsset().getId(), reservedAmount, order.getId());
             } else {
                 // SELL order: reserve base currency (e.g., BTC)
-                BigDecimal reservedAmount = MoneyUtils.normalize(amount);
+                BigDecimal reservedAmount = MoneyUtils.normalize(normalizedQuantity);
                 walletService.reserveForOrder(userId, market.getBaseAsset().getId(), reservedAmount, order.getId());
             }
         } catch (Exception e) {
@@ -118,6 +126,44 @@ public class OrderService {
     }
     
     /**
+     * Cancels an order for a specific user (ensures user can only cancel their own orders).
+     */
+    public Order cancelMyOrder(UUID orderId, UUID userId) {
+        Order order = orderRepository.findByIdAndUserId(orderId, userId)
+            .orElseThrow(() -> new NotFoundException("Order not found with id: " + orderId));
+        
+        if (order.getStatus() != OrderStatus.NEW && order.getStatus() != OrderStatus.PARTIALLY_FILLED) {
+            throw new InvalidOrderException(
+                String.format("Cannot cancel order with status %s. Only NEW or PARTIALLY_FILLED orders can be canceled",
+                    order.getStatus()));
+        }
+        
+        // Calculate remaining reserved amount
+        BigDecimal remainingAmount = order.getAmount().subtract(order.getFilledAmount());
+        
+        // Release reserved funds
+        try {
+            if (order.getSide() == OrderSide.BUY) {
+                // BUY order: release quote currency
+                BigDecimal reservedAmount = MoneyUtils.normalize(order.getPrice().multiply(remainingAmount));
+                walletService.releaseReservation(userId, 
+                    order.getMarket().getQuoteAsset().getId(), reservedAmount, orderId);
+            } else {
+                // SELL order: release base currency
+                BigDecimal reservedAmount = MoneyUtils.normalize(remainingAmount);
+                walletService.releaseReservation(userId, 
+                    order.getMarket().getBaseAsset().getId(), reservedAmount, orderId);
+            }
+        } catch (Exception e) {
+            log.error("Failed to release reservation for order {}: {}", orderId, e.getMessage());
+            // Continue with cancellation even if release fails (may have been already released)
+        }
+        
+        order.setStatus(OrderStatus.CANCELED);
+        return orderRepository.save(order);
+    }
+    
+    /**
      * Settles a trade execution. Transfers funds between buyer and seller and captures reserved amounts.
      * This method should be called when a trade is executed.
      */
@@ -149,9 +195,29 @@ public class OrderService {
         return orderRepository.findById(orderId)
             .orElseThrow(() -> new NotFoundException("Order not found with id: " + orderId));
     }
+    
+    /**
+     * Gets an order by ID for a specific user (ensures user can only access their own orders).
+     */
+    @Transactional(readOnly = true)
+    public Order getMyOrder(UUID orderId, UUID userId) {
+        return orderRepository.findByIdAndUserId(orderId, userId)
+            .orElseThrow(() -> new NotFoundException("Order not found with id: " + orderId));
+    }
 
     @Transactional(readOnly = true)
     public List<Order> getUserOrders(UUID userId) {
         return orderRepository.findAllByUserIdOrderByCreatedAtDesc(userId);
+    }
+    
+    /**
+     * Lists orders for a specific user with pagination support.
+     */
+    @Transactional(readOnly = true)
+    public Page<Order> listMyOrders(UUID userId, OrderStatus status, Pageable pageable) {
+        if (status != null) {
+            return orderRepository.findAllByUserIdAndStatus(userId, status, pageable);
+        }
+        return orderRepository.findAllByUserId(userId, pageable);
     }
 }

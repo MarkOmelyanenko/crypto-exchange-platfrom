@@ -57,4 +57,14 @@ public class MoneyUtils {
         validatePositive(amount);
         return normalize(amount);
     }
+    
+    /**
+     * Normalizes a BigDecimal to a specific scale with DOWN rounding (truncates).
+     */
+    public static BigDecimal normalizeWithScaleDown(BigDecimal amount, int scale) {
+        if (amount == null) {
+            return null;
+        }
+        return amount.setScale(scale, RoundingMode.DOWN);
+    }
 }
