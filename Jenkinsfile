@@ -5,10 +5,11 @@ pipeline {
         stage('Build & Test') {
             steps {
                 dir('backend') {
-                    // Skip integration tests (those requiring containers)
+                    // Skip tests requiring external services (DB, Redis, Kafka)
+                    // Exclude: Integration tests and SpringBootTest context loading tests
                     sh '''
-                        ./mvnw -B -ntp clean test -Dtest='!*IntegrationTest' || \
-                        mvn -B -ntp clean test -Dtest='!*IntegrationTest'
+                        ./mvnw -B -ntp clean test -Dtest='!*IntegrationTest,!BackendApplicationTests' || \
+                        mvn -B -ntp clean test -Dtest='!*IntegrationTest,!BackendApplicationTests'
                     '''
                 }
             }
