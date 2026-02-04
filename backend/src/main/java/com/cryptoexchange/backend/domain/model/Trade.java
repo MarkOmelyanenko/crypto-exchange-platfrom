@@ -32,6 +32,9 @@ public class Trade {
     @Column(nullable = false, precision = 38, scale = 18)
     private BigDecimal amount;
 
+    @Column(name = "quote_amount", nullable = false, precision = 38, scale = 18)
+    private BigDecimal quoteAmount;
+
     @Column(name = "executed_at", nullable = false)
     private OffsetDateTime executedAt;
 
@@ -52,6 +55,16 @@ public class Trade {
         this.takerOrder = takerOrder;
         this.price = price;
         this.amount = amount;
+        this.quoteAmount = price.multiply(amount);
+    }
+
+    public Trade(Market market, Order makerOrder, Order takerOrder, BigDecimal price, BigDecimal amount, BigDecimal quoteAmount) {
+        this.market = market;
+        this.makerOrder = makerOrder;
+        this.takerOrder = takerOrder;
+        this.price = price;
+        this.amount = amount;
+        this.quoteAmount = quoteAmount;
     }
 
     // Getters and Setters
@@ -101,6 +114,14 @@ public class Trade {
 
     public void setAmount(BigDecimal amount) {
         this.amount = amount;
+    }
+
+    public BigDecimal getQuoteAmount() {
+        return quoteAmount;
+    }
+
+    public void setQuoteAmount(BigDecimal quoteAmount) {
+        this.quoteAmount = quoteAmount;
     }
 
     public OffsetDateTime getExecutedAt() {

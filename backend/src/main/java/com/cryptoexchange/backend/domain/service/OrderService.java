@@ -1,5 +1,6 @@
 package com.cryptoexchange.backend.domain.service;
 
+import com.cryptoexchange.backend.domain.event.OrderCreatedEvent;
 import com.cryptoexchange.backend.domain.exception.InvalidOrderException;
 import com.cryptoexchange.backend.domain.exception.NotFoundException;
 import com.cryptoexchange.backend.domain.model.Market;
@@ -14,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,13 +33,16 @@ public class OrderService {
     private final UserService userService;
     private final MarketService marketService;
     private final WalletService walletService;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
     public OrderService(OrderRepository orderRepository, UserService userService, 
-                       MarketService marketService, WalletService walletService) {
+                       MarketService marketService, WalletService walletService,
+                       KafkaTemplate<String, Object> kafkaTemplate) {
         this.orderRepository = orderRepository;
         this.userService = userService;
         this.marketService = marketService;
         this.walletService = walletService;
+        this.kafkaTemplate = kafkaTemplate;
     }
 
     public Order placeOrder(UUID userId, UUID marketId, OrderSide side, OrderType type, 
@@ -68,6 +73,7 @@ public class OrderService {
         
         // Create order first
         Order order = new Order(user, market, side, type, normalizedPrice, normalizedQuantity);
+        order.setStatus(OrderStatus.NEW); // Set status to NEW (OPEN) for matching
         order = orderRepository.save(order);
         
         // Reserve funds based on order side
@@ -85,6 +91,16 @@ public class OrderService {
             // If reservation fails, the transaction will rollback and order won't be saved
             log.error("Failed to reserve funds for order {}: {}", order.getId(), e.getMessage());
             throw new InvalidOrderException("Failed to reserve funds: " + e.getMessage());
+        }
+        
+        // Publish OrderCreatedEvent to trigger matching (keyed by marketSymbol for partition affinity)
+        try {
+            OrderCreatedEvent event = new OrderCreatedEvent(order.getId(), market.getId(), market.getSymbol());
+            kafkaTemplate.send("orders", market.getSymbol(), event);
+            log.debug("Published OrderCreatedEvent for order {}", order.getId());
+        } catch (Exception e) {
+            // Log error but don't fail order creation - matching can be triggered manually if needed
+            log.error("Failed to publish OrderCreatedEvent for order {}: {}", order.getId(), e.getMessage());
         }
         
         return order;
