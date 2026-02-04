@@ -44,7 +44,12 @@ pipeline {
                     def testHost = sh(
                         script: '''
                             # Try host.docker.internal first (works on Mac/Windows Docker Desktop)
-                            if ping -c 1 -W 1 host.docker.internal > /dev/null 2>&1; then
+                            # Check DNS resolution first as ping might be blocked or not available
+                            if getent hosts host.docker.internal > /dev/null 2>&1; then
+                                echo "host.docker.internal"
+                            elif nslookup host.docker.internal > /dev/null 2>&1; then
+                                echo "host.docker.internal"
+                            elif ping -c 1 -W 1 host.docker.internal > /dev/null 2>&1; then
                                 echo "host.docker.internal"
                             else
                                 # For Linux, try to get the host IP from the default gateway
