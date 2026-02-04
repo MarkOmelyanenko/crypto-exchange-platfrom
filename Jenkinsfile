@@ -1,617 +1,123 @@
 pipeline {
     agent any
-    
-    tools {
-        // These tools should be configured in Jenkins: Manage Jenkins -> Tools
-        // For Maven: Add Maven installation (e.g., version 3.9.x)
-        // For JDK: Add JDK installation (e.g., Java 21) OR use JAVA_HOME environment variable
-        maven 'Maven' // Configure in Jenkins Global Tool Configuration
-        // JDK is optional - will use JAVA_HOME if not configured
-        // jdk 'JDK21'   // Uncomment and configure in Jenkins Global Tool Configuration
-    }
-    
+
     environment {
-        // Maven settings for caching
-        MAVEN_OPTS = '-Dmaven.repo.local=/var/jenkins_home/.m2/repository'
-        // Docker image names
-        BACKEND_IMAGE = 'crypto-exchange-backend:latest'
-        FRONTEND_IMAGE = 'crypto-exchange-frontend:latest'
-        // Test environment variables (will be set in script)
-        POSTGRES_DB = 'crypto_exchange_test'
-        POSTGRES_USER = 'postgres'
-        POSTGRES_PASSWORD = 'postgres'
-        SPRING_PROFILES_ACTIVE = 'test'
+        // Build settings
+        MAVEN_OPTS = "-Dmaven.repo.local=.m2/repository"
+        // Docker configuration
+        DOCKER_BUILDKIT = "1"
     }
-    
+
     stages {
         stage('Checkout') {
             steps {
-                script {
-                    if (env.BRANCH_NAME) {
-                        checkout scm
-                    } else {
-                        // For local testing, workspace should already be available
-                        sh 'pwd && ls -la'
-                    }
-                }
+                checkout scm
+                sh 'ls -la'
             }
         }
-        
-        stage('Backend: Start Test Services') {
-            steps {
-                script {
-                    // Detect host IP for accessing services from Jenkins container
-                    def testHost = sh(
-                        script: '''
-                            # Try host.docker.internal first (works on Mac/Windows Docker Desktop)
-                            # Check DNS resolution first as ping might be blocked or not available
-                            if getent hosts host.docker.internal > /dev/null 2>&1; then
-                                echo "host.docker.internal"
-                            elif nslookup host.docker.internal > /dev/null 2>&1; then
-                                echo "host.docker.internal"
-                            elif ping -c 1 -W 1 host.docker.internal > /dev/null 2>&1; then
-                                echo "host.docker.internal"
-                            else
-                                # For Linux, try to get the host IP from the default gateway
-                                # Try ip command first, then fallback to route
-                                if command -v ip > /dev/null 2>&1; then
-                                    ip route show default 2>/dev/null | awk '/default/ {print $3}' | head -1
-                                elif command -v route > /dev/null 2>&1; then
-                                    route -n | awk '/^0.0.0.0/ {print $2}' | head -1
-                                else
-                                    # Last resort: use localhost (may work if services are on same network)
-                                    echo "localhost"
-                                fi
-                            fi
-                        ''',
-                        returnStdout: true
-                    ).trim()
-                    
-                    // Fallback to localhost if detection failed
-                    if (!testHost || testHost.isEmpty()) {
-                        testHost = "localhost"
-                    }
-                    
-                    if (!testHost) {
-                        testHost = "localhost"
-                    }
-                    
-                    env.TEST_HOST = testHost
-                    env.SPRING_DATASOURCE_URL = "jdbc:postgresql://${testHost}:5434/crypto_exchange_test?connectTimeout=30&socketTimeout=60"
-                    env.SPRING_DATASOURCE_USERNAME = "postgres"
-                    env.SPRING_DATASOURCE_PASSWORD = "postgres"
-                    env.REDIS_HOST = testHost
-                    env.REDIS_PORT = "6381"
-                    env.KAFKA_BOOTSTRAP_SERVERS = "${testHost}:9094"
-                    
-                    echo "Using test host: ${testHost}"
-                    echo "PostgreSQL URL: ${env.SPRING_DATASOURCE_URL}"
-                    echo "Redis: ${env.REDIS_HOST}:${env.REDIS_PORT}"
-                    echo "Kafka: ${env.KAFKA_BOOTSTRAP_SERVERS}"
-                }
-                sh '''
-                    echo "Starting test services (PostgreSQL, Redis, Kafka)..."
-                    # Use docker compose (v2) or fallback to docker-compose
-                    if command -v docker > /dev/null 2>&1 && docker compose version > /dev/null 2>&1; then
-                        docker compose -f devops/docker-compose.test.yml up -d
-                    elif command -v docker-compose > /dev/null 2>&1; then
-                        docker-compose -f devops/docker-compose.test.yml up -d
-                    else
-                        echo "ERROR: Neither 'docker compose' nor 'docker-compose' is available"
-                        echo "Please ensure Docker is installed and accessible in the Jenkins container"
-                        exit 1
-                    fi
-                    
-                    echo "Waiting for services to be healthy..."
-                    # Wait for PostgreSQL (up to 60 seconds)
-                    timeout=60
-                    elapsed=0
-                    while [ $elapsed -lt $timeout ]; do
-                        if docker exec test-postgres pg_isready -U postgres > /dev/null 2>&1; then
-                            echo "✓ PostgreSQL is ready"
-                            break
-                        fi
-                        sleep 2
-                        elapsed=$((elapsed + 2))
-                    done
-                    if [ $elapsed -ge $timeout ]; then
-                        echo "✗ PostgreSQL failed to start"
-                        docker logs test-postgres
-                        exit 1
-                    fi
-                    
-                    # Wait for Redis
-                    elapsed=0
-                    while [ $elapsed -lt $timeout ]; do
-                        if docker exec test-redis redis-cli ping > /dev/null 2>&1; then
-                            echo "✓ Redis is ready"
-                            break
-                        fi
-                        sleep 2
-                        elapsed=$((elapsed + 2))
-                    done
-                    if [ $elapsed -ge $timeout ]; then
-                        echo "✗ Redis failed to start"
-                        docker logs test-redis
-                        exit 1
-                    fi
-                    
-                    # Wait for Zookeeper
-                    elapsed=0
-                    while [ $elapsed -lt $timeout ]; do
-                        if docker exec test-zookeeper nc -z localhost 2181 > /dev/null 2>&1; then
-                            echo "✓ Zookeeper is ready"
-                            break
-                        fi
-                        sleep 2
-                        elapsed=$((elapsed + 2))
-                    done
-                    if [ $elapsed -ge $timeout ]; then
-                        echo "✗ Zookeeper failed to start"
-                        docker logs test-zookeeper
-                        exit 1
-                    fi
-                    
-                    # Wait for Kafka (needs Zookeeper to be ready first)
-                    elapsed=0
-                    while [ $elapsed -lt $timeout ]; do
-                        if docker exec test-kafka kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1; then
-                            echo "✓ Kafka is ready"
-                            break
-                        fi
-                        sleep 2
-                        elapsed=$((elapsed + 2))
-                    done
-                    if [ $elapsed -ge $timeout ]; then
-                        echo "✗ Kafka failed to start"
-                        docker logs test-kafka
-                        exit 1
-                    fi
-                    
-                    echo "All test services are ready"
-                    
-                    # Give services a moment to fully stabilize
-                    echo "Waiting 3 seconds for services to stabilize..."
-                    sleep 3
-                    
-                    # Verify PostgreSQL is actually accepting connections
-                    echo "Verifying PostgreSQL is accepting connections..."
-                    if docker exec test-postgres psql -U postgres -d crypto_exchange_test -c "SELECT version();" > /dev/null 2>&1; then
-                        echo "✓ PostgreSQL is ready and accepting connections"
-                    else
-                        echo "✗ PostgreSQL is not accepting connections"
-                        docker logs test-postgres | tail -20
-                        exit 1
-                    fi
-                '''
-            }
-        }
-        
+
         stage('Backend: Build & Test') {
             steps {
-                script {
-                    // Determine the best connection URL for PostgreSQL
-                    // Since tests run on Jenkins agent, we need to use the exposed port
-                    def testHost = env.TEST_HOST ?: "localhost"
-                    def pgUrl = "jdbc:postgresql://${testHost}:5434/crypto_exchange_test?connectTimeout=30&socketTimeout=60"
-                    
-                    // Verify PostgreSQL is actually reachable from Jenkins agent
-                    def pgReachable = sh(
-                        script: """
-                            if command -v nc > /dev/null 2>&1; then
-                                if timeout 5 nc -z ${testHost} 5434 2>/dev/null; then
-                                    echo "yes"
-                                else
-                                    echo "no"
-                                fi
-                            else
-                                # If nc not available, try using psql from container
-                                if docker exec test-postgres psql -U postgres -d crypto_exchange_test -c "SELECT 1" > /dev/null 2>&1; then
-                                    echo "yes"
-                                else
-                                    echo "no"
-                                fi
-                            fi
-                        """,
-                        returnStdout: true
-                    ).trim()
-                    
-                    if (pgReachable != "yes") {
-                        echo "WARNING: PostgreSQL may not be reachable at ${testHost}:5434"
-                        echo "Attempting to use container IP as fallback..."
-                        def pgIp = sh(
-                            script: 'docker inspect -f "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}" test-postgres 2>/dev/null || echo ""',
-                            returnStdout: true
-                        ).trim()
-                        if (pgIp && !pgIp.isEmpty()) {
-                            pgUrl = "jdbc:postgresql://${pgIp}:5432/crypto_exchange_test?connectTimeout=30&socketTimeout=60"
-                            echo "Using container IP: ${pgUrl}"
+                dir('backend') {
+                    script {
+                        // Run backend tests using Maven
+                        // Testcontainers will handle database/redis/kafka automatically
+                        if (fileExists('./mvnw')) {
+                            sh 'chmod +x ./mvnw'
+                            sh './mvnw -B -DskipTests=false clean test'
                         } else {
-                            echo "ERROR: Could not determine PostgreSQL connection method"
-                            error("PostgreSQL connection failed")
+                            sh 'mvn -B -DskipTests=false clean test'
                         }
                     }
-                    
-                    env.SPRING_DATASOURCE_URL = pgUrl
-                    echo "Using PostgreSQL connection URL: ${pgUrl}"
-                    
-                    // Verify services are accessible before running tests
-                    sh """
-                        echo "=== Verifying service connectivity ==="
-                        echo "TEST_HOST: ${testHost}"
-                        echo "SPRING_DATASOURCE_URL: ${pgUrl}"
-                        
-                        # Extract host and port from URL for testing
-                        pg_conn=\$(echo "${pgUrl}" | awk -F'jdbc:postgresql://' '{print \$2}' | awk -F'/' '{print \$1}' | awk -F'?' '{print \$1}')
-                        pg_host=\$(echo "\$pg_conn" | cut -d: -f1)
-                        pg_port=\$(echo "\$pg_conn" | cut -d: -f2)
-                        
-                        echo "Testing PostgreSQL connection at \$pg_host:\$pg_port..."
-                        
-                        # Test TCP connectivity first
-                        if command -v nc > /dev/null 2>&1; then
-                            if timeout 5 nc -z "\$pg_host" "\$pg_port" 2>/dev/null; then
-                                echo "✓ PostgreSQL TCP connection successful"
-                            else
-                                echo "✗ PostgreSQL TCP connection failed"
-                                echo "This may indicate a network routing issue."
-                                echo "Container network info:"
-                                docker inspect test-postgres | grep -A 10 "Networks" || true
-                            fi
-                        else
-                            echo "WARNING: nc (netcat) not available, skipping TCP test"
-                        fi
-                        
-                        # Verify database exists and is accessible from container
-                        echo "Verifying database from container..."
-                        if docker ps | grep -q test-postgres; then
-                            if docker exec test-postgres psql -U postgres -d crypto_exchange_test -c "SELECT 1" > /dev/null 2>&1; then
-                                echo "✓ Database 'crypto_exchange_test' exists and is accessible from container"
-                            else
-                                echo "✗ Database 'crypto_exchange_test' not accessible from container"
-                                echo "Attempting to create database..."
-                                docker exec test-postgres psql -U postgres -c "CREATE DATABASE crypto_exchange_test;" 2>/dev/null || true
-                            fi
-                        fi
-                        
-                        # Try to connect using psql if available (for final verification)
-                        if command -v psql > /dev/null 2>&1; then
-                            echo "Testing PostgreSQL connection using psql..."
-                            export PGPASSWORD=postgres
-                            if timeout 5 psql -h "\$pg_host" -p "\$pg_port" -U postgres -d crypto_exchange_test -c "SELECT version();" > /dev/null 2>&1; then
-                                echo "✓ PostgreSQL connection verified with psql"
-                            else
-                                echo "✗ PostgreSQL connection failed with psql"
-                                echo "This indicates the connection URL may be incorrect for the Jenkins agent"
-                            fi
-                        else
-                            echo "psql not available on Jenkins agent, skipping direct connection test"
-                        fi
-                        
-                        echo "Testing Redis connection..."
-                        if command -v nc > /dev/null 2>&1; then
-                            if timeout 5 nc -z ${testHost} 6381 2>/dev/null; then
-                                echo "✓ Redis reachable"
-                            else
-                                echo "✗ Redis not reachable"
-                            fi
-                        fi
-                        
-                        echo "Testing Kafka connection..."
-                        if command -v nc > /dev/null 2>&1; then
-                            if timeout 5 nc -z ${testHost} 9094 2>/dev/null; then
-                                echo "✓ Kafka reachable"
-                            else
-                                echo "✗ Kafka not reachable"
-                            fi
-                        fi
-                        echo "====================================="
-                    """
-                }
-                dir('backend') {
-                    sh """
-                        # Check if Java is available
-                        if ! command -v java > /dev/null 2>&1 && [ -z "\$JAVA_HOME" ]; then
-                            echo "WARNING: Java not found. Checking if Maven wrapper can provide Java..."
-                        fi
-                        
-                        # Print environment variables for debugging
-                        echo "=== Test Environment ==="
-                        echo "SPRING_DATASOURCE_URL: \${SPRING_DATASOURCE_URL}"
-                        echo "SPRING_DATASOURCE_USERNAME: \${SPRING_DATASOURCE_USERNAME}"
-                        echo "SPRING_DATASOURCE_PASSWORD: \${SPRING_DATASOURCE_PASSWORD}"
-                        echo "REDIS_HOST: \${REDIS_HOST}"
-                        echo "REDIS_PORT: \${REDIS_PORT}"
-                        echo "KAFKA_BOOTSTRAP_SERVERS: \${KAFKA_BOOTSTRAP_SERVERS}"
-                        echo "SPRING_PROFILES_ACTIVE: \${SPRING_PROFILES_ACTIVE}"
-                        echo "TEST_HOST: \${TEST_HOST}"
-                        echo "========================"
-                        
-                        # Export environment variables explicitly to ensure they're available to Maven
-                        export SPRING_DATASOURCE_URL="\${SPRING_DATASOURCE_URL}"
-                        export SPRING_DATASOURCE_USERNAME="\${SPRING_DATASOURCE_USERNAME}"
-                        export SPRING_DATASOURCE_PASSWORD="\${SPRING_DATASOURCE_PASSWORD}"
-                        export REDIS_HOST="\${REDIS_HOST}"
-                        export REDIS_PORT="\${REDIS_PORT}"
-                        export KAFKA_BOOTSTRAP_SERVERS="\${KAFKA_BOOTSTRAP_SERVERS}"
-                        export SPRING_PROFILES_ACTIVE="\${SPRING_PROFILES_ACTIVE}"
-                        
-                        # Verify environment variables are set
-                        echo "=== Verifying environment variables are exported ==="
-                        echo "SPRING_DATASOURCE_URL: \$SPRING_DATASOURCE_URL"
-                        echo "SPRING_DATASOURCE_USERNAME: \$SPRING_DATASOURCE_USERNAME"
-                        echo "SPRING_DATASOURCE_PASSWORD: [REDACTED]"
-                        echo "=================================================="
-                        
-                        # Use Maven wrapper if available, otherwise use mvn command
-                        # Pass environment variables explicitly via MAVEN_OPTS if needed
-                        if [ -f "./mvnw" ]; then
-                            echo "Using Maven wrapper..."
-                            ./mvnw -B -DskipTests=false clean test || true
-                        else
-                            echo "Using system Maven..."
-                            mvn -B -DskipTests=false clean test || true
-                        fi
-                    """
-                }
-            }
-            post {
-                always {
-                    // Archive test results and show detailed errors
-                    dir('backend') {
-                        junit 'target/surefire-reports/*.xml'
-                        sh '''
-                            echo "=== Test Failure Details ==="
-                            if [ -d "target/surefire-reports" ]; then
-                                for file in target/surefire-reports/*.txt; do
-                                    if [ -f "$file" ]; then
-                                        echo "--- $(basename $file) ---"
-                                        head -200 "$file"
-                                        echo ""
-                                    fi
-                                done
-                            fi
-                            echo "=== Checking test XML reports ==="
-                            if [ -d "target/surefire-reports" ]; then
-                                ls -la target/surefire-reports/
-                            fi
-                        '''
-                    }
-                    // Always tear down test services
-                    sh '''
-                        echo "Stopping test services..."
-                        # Use docker compose (v2) or fallback to docker-compose
-                        if command -v docker > /dev/null 2>&1 && docker compose version > /dev/null 2>&1; then
-                            docker compose -f devops/docker-compose.test.yml down -v || true
-                        elif command -v docker-compose > /dev/null 2>&1; then
-                            docker-compose -f devops/docker-compose.test.yml down -v || true
-                        fi
-                    '''
                 }
             }
         }
-        
+
         stage('Backend: Package') {
             steps {
                 dir('backend') {
-                    sh '''
-                        echo "Packaging backend application..."
-                        # Use Maven wrapper if available, otherwise use mvn command
-                        if [ -f "./mvnw" ]; then
-                            ./mvnw -B -DskipTests package
-                        else
-                            mvn -B -DskipTests package
-                        fi
-                    '''
-                }
-            }
-        }
-        
-        stage('Backend: Docker Build') {
-            steps {
-                dir('backend') {
                     script {
-                        if (fileExists('Dockerfile')) {
-                            sh """
-                                echo "Building Docker image: ${env.BACKEND_IMAGE}"
-                                docker build -t ${env.BACKEND_IMAGE} .
-                            """
+                        if (fileExists('./mvnw')) {
+                            sh './mvnw -B -DskipTests=true clean package'
                         } else {
-                            error("Backend Dockerfile not found. Please create one.")
+                            sh 'mvn -B -DskipTests=true clean package'
                         }
                     }
                 }
             }
         }
-        
-        stage('Frontend: Build & Test') {
-            when {
-                expression { fileExists('frontend/package.json') }
-            }
+
+        stage('Build Docker Images') {
             steps {
-                dir('frontend') {
-                    script {
-                        // Check if npm is available
-                        def npmAvailable = sh(
-                            script: 'command -v npm > /dev/null 2>&1',
-                            returnStatus: true
-                        ) == 0
-                        
-                        if (!npmAvailable) {
-                            echo "WARNING: npm not found. Skipping frontend build."
-                            echo "To enable frontend builds, install Node.js in the Jenkins container."
-                            return
-                        }
-                        
-                        sh '''
-                            echo "Installing frontend dependencies..."
-                            npm ci
-                        '''
-                        
-                        // Try to run tests, but don't fail if test script doesn't exist
-                        def testScript = sh(
-                            script: 'npm run test 2>&1 || echo "No test script found"',
-                            returnStatus: true
-                        )
-                        if (testScript != 0) {
-                            echo "No test script found or tests skipped, proceeding with build..."
-                        }
-                        
-                        sh '''
-                            echo "Building frontend..."
-                            npm run build
-                        '''
-                    }
+                script {
+                    echo "Building Backend Docker Image..."
+                    sh 'docker build -t crypto-exchange-backend:latest ./backend'
+                    
+                    echo "Building Frontend Docker Image..."
+                    sh 'docker build -t crypto-exchange-frontend:latest ./frontend'
                 }
             }
         }
-        
-        stage('Frontend: Docker Build') {
-            when {
-                expression { 
-                    fileExists('frontend/package.json') && fileExists('frontend/Dockerfile')
-                }
-            }
-            steps {
-                dir('frontend') {
-                    sh """
-                        echo "Building Docker image: ${env.FRONTEND_IMAGE}"
-                        docker build -t ${env.FRONTEND_IMAGE} .
-                    """
-                }
-            }
-        }
-        
+
         stage('Smoke Test') {
             steps {
                 script {
-                    // Start services using CI docker-compose
-                    sh '''
-                        echo "Starting services for smoke test..."
-                        # Use docker compose (v2) or fallback to docker-compose
-                        if command -v docker > /dev/null 2>&1 && docker compose version > /dev/null 2>&1; then
-                            docker compose -f devops/docker-compose.ci.yml up -d
-                        elif command -v docker-compose > /dev/null 2>&1; then
-                            docker-compose -f devops/docker-compose.ci.yml up -d
-                        else
-                            echo "ERROR: Neither 'docker compose' nor 'docker-compose' is available"
-                            exit 1
-                        fi
-                        
-                        # Wait for PostgreSQL to be fully ready (including database creation)
-                        echo "Waiting for PostgreSQL database to be created..."
-                        max_wait=30
-                        waited=0
-                        while [ $waited -lt $max_wait ]; do
-                            # Check if database exists by trying to connect to it
-                            if docker exec ci-postgres psql -U postgres -d crypto_exchange -c "SELECT 1" > /dev/null 2>&1; then
-                                echo "✓ Database 'crypto_exchange' exists and is accessible"
-                                break
-                            fi
-                            # Also try to create it if it doesn't exist (in case POSTGRES_DB didn't work)
-                            if [ $waited -eq 5 ]; then
-                                echo "Attempting to create database if it doesn't exist..."
-                                docker exec ci-postgres psql -U postgres -c "CREATE DATABASE crypto_exchange;" 2>/dev/null || true
-                            fi
-                            sleep 1
-                            waited=$((waited + 1))
-                        done
-                        if [ $waited -ge $max_wait ]; then
-                            echo "✗ Database 'crypto_exchange' was not created within timeout"
-                            echo "Listing all databases:"
-                            docker exec ci-postgres psql -U postgres -l || true
-                            docker logs ci-postgres | tail -20
-                            exit 1
-                        fi
-                        
-                        # Give PostgreSQL a moment to fully initialize after database creation
-                        echo "Waiting 2 seconds for PostgreSQL to fully initialize..."
-                        sleep 2
-                        
-                        # Verify we can actually execute SQL (not just connect)
-                        echo "Verifying database is ready for migrations..."
-                        docker exec ci-postgres psql -U postgres -d crypto_exchange -c "SELECT version();" > /dev/null 2>&1
-                        if [ $? -eq 0 ]; then
-                            echo "✓ Database is ready for Flyway migrations"
-                        else
-                            echo "✗ Database connection test failed"
-                            exit 1
-                        fi
-                    '''
-                    
-                    // Wait for backend to be healthy (give it more time for Flyway migrations)
-                    sh '''
-                        echo "Waiting for backend to be healthy..."
-                        echo "Note: Backend needs time to run Flyway migrations on first startup"
-                        max_attempts=60  # Increased to 2 minutes for migrations
-                        attempt=0
-                        while [ $attempt -lt $max_attempts ]; do
-                            # Check if backend container is still running
-                            if ! docker ps | grep -q ci-backend; then
-                                echo "Backend container stopped! Checking logs..."
-                                echo "=== Full Backend Logs ==="
-                                docker logs ci-backend 2>&1 | tail -100 || true
-                                echo "=== Checking database state ==="
-                                docker exec ci-postgres psql -U postgres -d crypto_exchange -c "\\dt" || true
-                                echo "=== Checking Flyway schema history ==="
-                                docker exec ci-postgres psql -U postgres -d crypto_exchange -c "SELECT * FROM flyway_schema_history;" || true
-                                exit 1
-                            fi
-                            
-                            if curl -f -s http://localhost:8080/actuator/health > /dev/null 2>&1; then
-                                echo "Backend is UP!"
-                                echo "Health check response:"
-                                curl -s http://localhost:8080/actuator/health | jq '.' 2>/dev/null || curl -s http://localhost:8080/actuator/health
-                                exit 0
-                            fi
-                            attempt=$((attempt + 1))
-                            if [ $((attempt % 5)) -eq 0 ]; then
-                                echo "Attempt $attempt/$max_attempts: Backend not ready yet, checking logs..."
-                                echo "=== Recent Backend Logs (including Flyway) ==="
-                                docker logs --tail 50 ci-backend 2>&1 | grep -i -E "(flyway|migration|schema|asset|error|exception)" || docker logs --tail 30 ci-backend || true
-                            else
-                                echo "Attempt $attempt/$max_attempts: Backend not ready yet, waiting..."
-                            fi
-                            sleep 2
-                        done
-                        echo "Backend failed to become healthy within timeout"
-                        echo "=== Full Backend Logs ==="
-                        docker logs ci-backend 2>&1 || true
-                        echo "=== Database Tables ==="
-                        docker exec ci-postgres psql -U postgres -d crypto_exchange -c "\\dt" || true
-                        echo "=== Flyway Schema History ==="
-                        docker exec ci-postgres psql -U postgres -d crypto_exchange -c "SELECT * FROM flyway_schema_history;" || true
-                        exit 1
-                    '''
+                    echo "Starting services for smoke test..."
+                    // Use docker compose (v2) or fallback to docker-compose
+                    if (sh(script: 'command -v docker && docker compose version', returnStatus: true) == 0) {
+                        sh 'docker compose -f devops/docker-compose.ci.yml up -d'
+                    } else if (sh(script: 'command -v docker-compose', returnStatus: true) == 0) {
+                        sh 'docker-compose -f devops/docker-compose.ci.yml up -d'
+                    } else {
+                        error "Neither 'docker compose' nor 'docker-compose' is available"
+                    }
+
+                    // Wait for PostgreSQL database creation using docker check
+                    echo "Waiting for PostgreSQL database to be created..."
+                    timeout(time: 2, unit: 'MINUTES') {
+                        waitUntil {
+                            def result = sh(
+                                script: 'docker exec ci-postgres psql -U postgres -d crypto_exchange -c "SELECT 1" > /dev/null 2>&1',
+                                returnStatus: true
+                            )
+                            return result == 0
+                        }
+                    }
+
+                    // Wait for backend health
+                    echo "Waiting for Backend to specific health endpoint..."
+                    timeout(time: 2, unit: 'MINUTES') {
+                        waitUntil {
+                             // Basic check if port is open or endpoint responds 
+                             // Since we might not have curl/wget inside agent sometimes, use python or docker exec curl
+                             def result = sh(
+                                 script: 'docker exec ci-backend curl -s -f http://localhost:8080/actuator/health > /dev/null 2>&1',
+                                 returnStatus: true
+                             )
+                             return result == 0
+                        }
+                    }
+                    echo "System is healthy!"
                 }
             }
             post {
                 always {
-                    // Always tear down containers
-                    sh '''
-                        echo "Tearing down test containers..."
-                        # Use docker compose (v2) or fallback to docker-compose
-                        if command -v docker > /dev/null 2>&1 && docker compose version > /dev/null 2>&1; then
-                            docker compose -f devops/docker-compose.ci.yml down -v
-                        elif command -v docker-compose > /dev/null 2>&1; then
-                            docker-compose -f devops/docker-compose.ci.yml down -v
-                        fi
-                    '''
+                    script {
+                        echo "Stopping smoke test services..."
+                        if (sh(script: 'command -v docker && docker compose version', returnStatus: true) == 0) {
+                            sh 'docker compose -f devops/docker-compose.ci.yml down -v'
+                        } else {
+                            sh 'docker-compose -f devops/docker-compose.ci.yml down -v'
+                        }
+                    }
                 }
             }
         }
     }
-    
+
     post {
-        success {
-            echo 'Pipeline succeeded!'
-        }
-        failure {
-            echo 'Pipeline failed!'
-        }
         always {
-            // Clean up any dangling images
-            sh 'docker image prune -f || true'
+            cleanWs()
         }
     }
 }
