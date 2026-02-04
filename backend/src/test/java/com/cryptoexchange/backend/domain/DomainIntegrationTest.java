@@ -24,6 +24,21 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 })
 class DomainIntegrationTest {
 
+    @org.springframework.boot.testcontainers.service.connection.ServiceConnection
+    static org.testcontainers.containers.PostgreSQLContainer<?> postgres = new org.testcontainers.containers.PostgreSQLContainer<>("postgres:16");
+
+    @org.springframework.boot.testcontainers.service.connection.ServiceConnection
+    static org.testcontainers.containers.GenericContainer<?> redis = new org.testcontainers.containers.GenericContainer<>("redis:7").withExposedPorts(6379);
+
+    @org.springframework.boot.testcontainers.service.connection.ServiceConnection
+    static org.testcontainers.containers.KafkaContainer kafka = new org.testcontainers.containers.KafkaContainer(org.testcontainers.utility.DockerImageName.parse("confluentinc/cp-kafka:7.6.2"));
+
+    static {
+        postgres.start();
+        redis.start();
+        kafka.start();
+    }
+
     @Autowired
     private UserAccountRepository userAccountRepository;
 
