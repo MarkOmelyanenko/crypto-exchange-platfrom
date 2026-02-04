@@ -27,12 +27,10 @@ spring:
     baseline-on-migrate: true
     baseline-version: 0
     locations: classpath:db/migration
-    validate-on-migrate: false  # Disable validation during migrate to avoid issues
+    validate-on-migrate: true  # Validate migrations after running them
     clean-disabled: true
     out-of-order: false
     baseline-description: "Initial baseline"
-    # Ensure migrations run
-    migrate-on-startup: true
 
 logging:
   level:
