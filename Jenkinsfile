@@ -389,6 +389,20 @@ pipeline {
                             docker logs ci-postgres | tail -20
                             exit 1
                         fi
+                        
+                        # Give PostgreSQL a moment to fully initialize after database creation
+                        echo "Waiting 2 seconds for PostgreSQL to fully initialize..."
+                        sleep 2
+                        
+                        # Verify we can actually execute SQL (not just connect)
+                        echo "Verifying database is ready for migrations..."
+                        docker exec ci-postgres psql -U postgres -d crypto_exchange -c "SELECT version();" > /dev/null 2>&1
+                        if [ $? -eq 0 ]; then
+                            echo "✓ Database is ready for Flyway migrations"
+                        else
+                            echo "✗ Database connection test failed"
+                            exit 1
+                        fi
                     '''
                     
                     // Wait for backend to be healthy (give it more time for Flyway migrations)
@@ -401,7 +415,12 @@ pipeline {
                             # Check if backend container is still running
                             if ! docker ps | grep -q ci-backend; then
                                 echo "Backend container stopped! Checking logs..."
-                                docker logs --tail 50 ci-backend || true
+                                echo "=== Full Backend Logs ==="
+                                docker logs ci-backend 2>&1 | tail -100 || true
+                                echo "=== Checking database state ==="
+                                docker exec ci-postgres psql -U postgres -d crypto_exchange -c "\\dt" || true
+                                echo "=== Checking Flyway schema history ==="
+                                docker exec ci-postgres psql -U postgres -d crypto_exchange -c "SELECT * FROM flyway_schema_history;" || true
                                 exit 1
                             fi
                             
@@ -414,15 +433,20 @@ pipeline {
                             attempt=$((attempt + 1))
                             if [ $((attempt % 5)) -eq 0 ]; then
                                 echo "Attempt $attempt/$max_attempts: Backend not ready yet, checking logs..."
-                                docker logs --tail 20 ci-backend || true
+                                echo "=== Recent Backend Logs (including Flyway) ==="
+                                docker logs --tail 50 ci-backend 2>&1 | grep -i -E "(flyway|migration|schema|asset|error|exception)" || docker logs --tail 30 ci-backend || true
                             else
                                 echo "Attempt $attempt/$max_attempts: Backend not ready yet, waiting..."
                             fi
                             sleep 2
                         done
                         echo "Backend failed to become healthy within timeout"
-                        echo "Checking full container logs..."
-                        docker logs ci-backend || true
+                        echo "=== Full Backend Logs ==="
+                        docker logs ci-backend 2>&1 || true
+                        echo "=== Database Tables ==="
+                        docker exec ci-postgres psql -U postgres -d crypto_exchange -c "\\dt" || true
+                        echo "=== Flyway Schema History ==="
+                        docker exec ci-postgres psql -U postgres -d crypto_exchange -c "SELECT * FROM flyway_schema_history;" || true
                         exit 1
                     '''
                 }

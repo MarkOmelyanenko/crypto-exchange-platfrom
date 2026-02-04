@@ -17,10 +17,11 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-    # Ensure JPA waits for Flyway to complete
+    # Disable JPA schema initialization - Flyway handles it
     defer-datasource-initialization: false
   
   # Ensure Flyway runs migrations in CI before Hibernate validation
+  # Flyway runs automatically before JPA initialization in Spring Boot
   flyway:
     enabled: true
     baseline-on-migrate: true
@@ -28,6 +29,8 @@ spring:
     locations: classpath:db/migration
     validate-on-migrate: true
     clean-disabled: true
+    # Enable debug logging for Flyway
+    out-of-order: false
 
 management:
   endpoint:

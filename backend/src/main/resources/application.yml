@@ -15,10 +15,11 @@ spring:
     hibernate:
       ddl-auto: validate  # Flyway manages schema, Hibernate only validates
     open-in-view: false
-    # Ensure JPA waits for Flyway to complete
+    # Disable JPA schema initialization - Flyway handles it
     defer-datasource-initialization: false
 
   # Flyway configuration
+  # Flyway runs automatically before JPA initialization in Spring Boot
   flyway:
     enabled: true
     baseline-on-migrate: true  # Allows Flyway to work with existing schemas
@@ -26,6 +27,7 @@ spring:
     locations: classpath:db/migration
     validate-on-migrate: true
     clean-disabled: true
+    out-of-order: false
 
   data:
     redis:
