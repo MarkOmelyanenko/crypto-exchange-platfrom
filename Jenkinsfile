@@ -72,7 +72,7 @@ pipeline {
                     }
                     
                     env.TEST_HOST = testHost
-                    env.SPRING_DATASOURCE_URL = "jdbc:postgresql://${testHost}:5434/crypto_exchange_test?connectTimeout=10&socketTimeout=30"
+                    env.SPRING_DATASOURCE_URL = "jdbc:postgresql://${testHost}:5434/crypto_exchange_test?connectTimeout=30&socketTimeout=60"
                     env.SPRING_DATASOURCE_USERNAME = "postgres"
                     env.SPRING_DATASOURCE_PASSWORD = "postgres"
                     env.REDIS_HOST = testHost
@@ -186,99 +186,160 @@ pipeline {
             steps {
                 script {
                     // Determine the best connection URL for PostgreSQL
-                    def pgUrl = env.SPRING_DATASOURCE_URL
+                    // Since tests run on Jenkins agent, we need to use the exposed port
+                    def testHost = env.TEST_HOST ?: "localhost"
+                    def pgUrl = "jdbc:postgresql://${testHost}:5434/crypto_exchange_test?connectTimeout=30&socketTimeout=60"
                     
-                    // Test connectivity and determine best connection method
-                    def connectionTest = sh(
-                        script: '''
-                            # Test localhost connection first (most common case)
-                            if command -v nc > /dev/null 2>&1 && timeout 5 nc -z localhost 5434 2>/dev/null; then
-                                echo "localhost:5434"
-                            # Fallback: try container IP
-                            elif docker ps | grep -q test-postgres; then
-                                pg_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' test-postgres 2>/dev/null || echo "")
-                                if [ -n "$pg_ip" ] && command -v nc > /dev/null 2>&1 && timeout 5 nc -z "$pg_ip" 5432 2>/dev/null; then
-                                    echo "${pg_ip}:5432"
+                    // Verify PostgreSQL is actually reachable from Jenkins agent
+                    def pgReachable = sh(
+                        script: """
+                            if command -v nc > /dev/null 2>&1; then
+                                if timeout 5 nc -z ${testHost} 5434 2>/dev/null; then
+                                    echo "yes"
                                 else
-                                    echo "${TEST_HOST:-localhost}:5434"
+                                    echo "no"
                                 fi
                             else
-                                echo "${TEST_HOST:-localhost}:5434"
+                                # If nc not available, try using psql from container
+                                if docker exec test-postgres psql -U postgres -d crypto_exchange_test -c "SELECT 1" > /dev/null 2>&1; then
+                                    echo "yes"
+                                else
+                                    echo "no"
+                                fi
                             fi
-                        ''',
+                        """,
                         returnStdout: true
                     ).trim()
                     
-                    // Extract host and port from connection test result
-                    def (host, port) = connectionTest.split(':')
-                    pgUrl = "jdbc:postgresql://${host}:${port}/crypto_exchange_test?connectTimeout=10&socketTimeout=30"
-                    env.SPRING_DATASOURCE_URL = pgUrl
+                    if (pgReachable != "yes") {
+                        echo "WARNING: PostgreSQL may not be reachable at ${testHost}:5434"
+                        echo "Attempting to use container IP as fallback..."
+                        def pgIp = sh(
+                            script: 'docker inspect -f "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}" test-postgres 2>/dev/null || echo ""',
+                            returnStdout: true
+                        ).trim()
+                        if (pgIp && !pgIp.isEmpty()) {
+                            pgUrl = "jdbc:postgresql://${pgIp}:5432/crypto_exchange_test?connectTimeout=30&socketTimeout=60"
+                            echo "Using container IP: ${pgUrl}"
+                        } else {
+                            echo "ERROR: Could not determine PostgreSQL connection method"
+                            error("PostgreSQL connection failed")
+                        }
+                    }
                     
+                    env.SPRING_DATASOURCE_URL = pgUrl
                     echo "Using PostgreSQL connection URL: ${pgUrl}"
                     
                     // Verify services are accessible before running tests
-                    sh '''
+                    sh """
                         echo "=== Verifying service connectivity ==="
-                        echo "TEST_HOST: ${TEST_HOST:-localhost}"
-                        echo "SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}"
+                        echo "TEST_HOST: ${testHost}"
+                        echo "SPRING_DATASOURCE_URL: ${pgUrl}"
                         
-                        # Test PostgreSQL connection
-                        echo "Testing PostgreSQL connection..."
+                        # Extract host and port from URL for testing
+                        pg_conn=\$(echo "${pgUrl}" | awk -F'jdbc:postgresql://' '{print \$2}' | awk -F'/' '{print \$1}' | awk -F'?' '{print \$1}')
+                        pg_host=\$(echo "\$pg_conn" | cut -d: -f1)
+                        pg_port=\$(echo "\$pg_conn" | cut -d: -f2)
+                        
+                        echo "Testing PostgreSQL connection at \$pg_host:\$pg_port..."
+                        
+                        # Test TCP connectivity first
                         if command -v nc > /dev/null 2>&1; then
-                            # Extract host and port from URL
-                            pg_url="${SPRING_DATASOURCE_URL}"
-                            if echo "$pg_url" | grep -q "jdbc:postgresql://"; then
-                                # Use awk to extract host:port, avoiding sed escaping issues
-                                pg_conn=$(echo "$pg_url" | awk -F'jdbc:postgresql://' '{print $2}' | awk -F'/' '{print $1}' | awk -F'?' '{print $1}')
-                                pg_host=$(echo "$pg_conn" | cut -d: -f1)
-                                pg_port=$(echo "$pg_conn" | cut -d: -f2)
-                                if timeout 5 nc -z "$pg_host" "$pg_port" 2>/dev/null; then
-                                    echo "✓ PostgreSQL reachable at $pg_host:$pg_port"
-                                else
-                                    echo "✗ PostgreSQL not reachable at $pg_host:$pg_port"
-                                fi
+                            if timeout 5 nc -z "\$pg_host" "\$pg_port" 2>/dev/null; then
+                                echo "✓ PostgreSQL TCP connection successful"
+                            else
+                                echo "✗ PostgreSQL TCP connection failed"
+                                echo "This may indicate a network routing issue."
+                                echo "Container network info:"
+                                docker inspect test-postgres | grep -A 10 "Networks" || true
+                            fi
+                        else
+                            echo "WARNING: nc (netcat) not available, skipping TCP test"
+                        fi
+                        
+                        # Verify database exists and is accessible from container
+                        echo "Verifying database from container..."
+                        if docker ps | grep -q test-postgres; then
+                            if docker exec test-postgres psql -U postgres -d crypto_exchange_test -c "SELECT 1" > /dev/null 2>&1; then
+                                echo "✓ Database 'crypto_exchange_test' exists and is accessible from container"
+                            else
+                                echo "✗ Database 'crypto_exchange_test' not accessible from container"
+                                echo "Attempting to create database..."
+                                docker exec test-postgres psql -U postgres -c "CREATE DATABASE crypto_exchange_test;" 2>/dev/null || true
                             fi
                         fi
                         
-                        # Verify database exists and is accessible
-                        if docker ps | grep -q test-postgres; then
-                            if docker exec test-postgres psql -U postgres -d crypto_exchange_test -c "SELECT 1" > /dev/null 2>&1; then
-                                echo "✓ Database 'crypto_exchange_test' exists and is accessible"
+                        # Try to connect using psql if available (for final verification)
+                        if command -v psql > /dev/null 2>&1; then
+                            echo "Testing PostgreSQL connection using psql..."
+                            export PGPASSWORD=postgres
+                            if timeout 5 psql -h "\$pg_host" -p "\$pg_port" -U postgres -d crypto_exchange_test -c "SELECT version();" > /dev/null 2>&1; then
+                                echo "✓ PostgreSQL connection verified with psql"
                             else
-                                echo "✗ Database 'crypto_exchange_test' not accessible"
+                                echo "✗ PostgreSQL connection failed with psql"
+                                echo "This indicates the connection URL may be incorrect for the Jenkins agent"
                             fi
+                        else
+                            echo "psql not available on Jenkins agent, skipping direct connection test"
                         fi
                         
                         echo "Testing Redis connection..."
                         if command -v nc > /dev/null 2>&1; then
-                            nc -z ${TEST_HOST:-localhost} 6381 && echo "✓ Redis reachable" || echo "✗ Redis not reachable"
+                            if timeout 5 nc -z ${testHost} 6381 2>/dev/null; then
+                                echo "✓ Redis reachable"
+                            else
+                                echo "✗ Redis not reachable"
+                            fi
                         fi
                         
                         echo "Testing Kafka connection..."
                         if command -v nc > /dev/null 2>&1; then
-                            nc -z ${TEST_HOST:-localhost} 9094 && echo "✓ Kafka reachable" || echo "✗ Kafka not reachable"
+                            if timeout 5 nc -z ${testHost} 9094 2>/dev/null; then
+                                echo "✓ Kafka reachable"
+                            else
+                                echo "✗ Kafka not reachable"
+                            fi
                         fi
                         echo "====================================="
-                    '''
+                    """
                 }
                 dir('backend') {
-                    sh '''
+                    sh """
                         # Check if Java is available
-                        if ! command -v java > /dev/null 2>&1 && [ -z "$JAVA_HOME" ]; then
+                        if ! command -v java > /dev/null 2>&1 && [ -z "\$JAVA_HOME" ]; then
                             echo "WARNING: Java not found. Checking if Maven wrapper can provide Java..."
                         fi
                         
                         # Print environment variables for debugging
                         echo "=== Test Environment ==="
-                        echo "SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}"
-                        echo "REDIS_HOST: ${REDIS_HOST}"
-                        echo "REDIS_PORT: ${REDIS_PORT}"
-                        echo "KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}"
-                        echo "SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}"
-                        echo "TEST_HOST: ${TEST_HOST}"
+                        echo "SPRING_DATASOURCE_URL: \${SPRING_DATASOURCE_URL}"
+                        echo "SPRING_DATASOURCE_USERNAME: \${SPRING_DATASOURCE_USERNAME}"
+                        echo "SPRING_DATASOURCE_PASSWORD: \${SPRING_DATASOURCE_PASSWORD}"
+                        echo "REDIS_HOST: \${REDIS_HOST}"
+                        echo "REDIS_PORT: \${REDIS_PORT}"
+                        echo "KAFKA_BOOTSTRAP_SERVERS: \${KAFKA_BOOTSTRAP_SERVERS}"
+                        echo "SPRING_PROFILES_ACTIVE: \${SPRING_PROFILES_ACTIVE}"
+                        echo "TEST_HOST: \${TEST_HOST}"
                         echo "========================"
                         
+                        # Export environment variables explicitly to ensure they're available to Maven
+                        export SPRING_DATASOURCE_URL="\${SPRING_DATASOURCE_URL}"
+                        export SPRING_DATASOURCE_USERNAME="\${SPRING_DATASOURCE_USERNAME}"
+                        export SPRING_DATASOURCE_PASSWORD="\${SPRING_DATASOURCE_PASSWORD}"
+                        export REDIS_HOST="\${REDIS_HOST}"
+                        export REDIS_PORT="\${REDIS_PORT}"
+                        export KAFKA_BOOTSTRAP_SERVERS="\${KAFKA_BOOTSTRAP_SERVERS}"
+                        export SPRING_PROFILES_ACTIVE="\${SPRING_PROFILES_ACTIVE}"
+                        
+                        # Verify environment variables are set
+                        echo "=== Verifying environment variables are exported ==="
+                        echo "SPRING_DATASOURCE_URL: \$SPRING_DATASOURCE_URL"
+                        echo "SPRING_DATASOURCE_USERNAME: \$SPRING_DATASOURCE_USERNAME"
+                        echo "SPRING_DATASOURCE_PASSWORD: [REDACTED]"
+                        echo "=================================================="
+                        
                         # Use Maven wrapper if available, otherwise use mvn command
+                        # Pass environment variables explicitly via MAVEN_OPTS if needed
                         if [ -f "./mvnw" ]; then
                             echo "Using Maven wrapper..."
                             ./mvnw -B -DskipTests=false clean test || true
@@ -286,7 +347,7 @@ pipeline {
                             echo "Using system Maven..."
                             mvn -B -DskipTests=false clean test || true
                         fi
-                    '''
+                    """
                 }
             }
             post {

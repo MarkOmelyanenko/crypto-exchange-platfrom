@@ -5,15 +5,16 @@
 
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5434/${POSTGRES_DB:-crypto_exchange_test}?connectTimeout=10&socketTimeout=30}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5434/${POSTGRES_DB:-crypto_exchange_test}?connectTimeout=30&socketTimeout=60}
     username: ${SPRING_DATASOURCE_USERNAME:${POSTGRES_USER:-postgres}}
     password: ${SPRING_DATASOURCE_PASSWORD:${POSTGRES_PASSWORD:-postgres}}
     driver-class-name: org.postgresql.Driver
     hikari:
-      connection-timeout: 30000  # 30 seconds
+      connection-timeout: 60000  # 60 seconds - increased for CI environments
       maximum-pool-size: 5
       minimum-idle: 1
       initialization-fail-timeout: -1  # Don't fail on initialization timeout
+      leak-detection-threshold: 60000  # Detect connection leaks
   
   jpa:
     hibernate:
