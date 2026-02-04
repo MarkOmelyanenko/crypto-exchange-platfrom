@@ -1,5 +1,6 @@
 package com.cryptoexchange.backend.domain.service;
 
+import com.cryptoexchange.backend.domain.event.DomainBalanceChanged;
 import com.cryptoexchange.backend.domain.exception.InsufficientBalanceException;
 import com.cryptoexchange.backend.domain.exception.NotFoundException;
 import com.cryptoexchange.backend.domain.model.Asset;
@@ -11,6 +12,9 @@ import com.cryptoexchange.backend.domain.repository.WalletHoldRepository;
 import com.cryptoexchange.backend.domain.util.MoneyUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,18 +34,22 @@ public class WalletService {
     private final WalletHoldRepository walletHoldRepository;
     private final UserService userService;
     private final AssetService assetService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public WalletService(BalanceRepository balanceRepository, 
                         WalletHoldRepository walletHoldRepository,
                         UserService userService, 
-                        AssetService assetService) {
+                        AssetService assetService,
+                        ApplicationEventPublisher eventPublisher) {
         this.balanceRepository = balanceRepository;
         this.walletHoldRepository = walletHoldRepository;
         this.userService = userService;
         this.assetService = assetService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "portfolio", key = "#userId.toString()")
     public List<Balance> getBalances(UUID userId) {
         return balanceRepository.findAllByUserId(userId);
     }
@@ -85,6 +93,9 @@ public class WalletService {
         balance.setAvailable(balance.getAvailable().add(normalizedAmount));
         Balance saved = balanceRepository.save(balance);
         
+        // Publish event for cache eviction (after commit)
+        eventPublisher.publishEvent(new DomainBalanceChanged(this, userId));
+        
         log.info("Deposited {} {} to user {}", normalizedAmount, asset.getSymbol(), userId);
         return saved;
     }
@@ -110,6 +121,9 @@ public class WalletService {
         
         balance.setAvailable(balance.getAvailable().subtract(normalizedAmount));
         Balance saved = balanceRepository.save(balance);
+        
+        // Publish event for cache eviction (after commit)
+        eventPublisher.publishEvent(new DomainBalanceChanged(this, userId));
         
         log.info("Withdrew {} {} from user {}", normalizedAmount, balance.getAsset().getSymbol(), userId);
         return saved;
@@ -302,6 +316,10 @@ public class WalletService {
         
         balanceRepository.save(fromBalance);
         balanceRepository.save(toBalance);
+        
+        // Publish events for cache eviction (after commit)
+        eventPublisher.publishEvent(new DomainBalanceChanged(this, fromUserId));
+        eventPublisher.publishEvent(new DomainBalanceChanged(this, toUserId));
         
         log.info("Transferred {} {} from user {} to user {} (reason: {}, ref: {})", 
             normalizedAmount, fromBalance.getAsset().getSymbol(), fromUserId, toUserId, reason, referenceId);

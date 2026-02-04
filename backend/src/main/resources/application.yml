@@ -31,8 +31,8 @@ spring:
 
   data:
     redis:
-      host: ${REDIS_HOST}
-      port: ${REDIS_PORT}
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
 
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
@@ -53,6 +53,33 @@ app:
       trades: trades
       orders-dlt: orders.DLT
       trades-dlt: trades.DLT
+  
+  redis:
+    cache:
+      ttl:
+        default: 30s
+        markets: 60s
+        ticker: 5s
+        orderBook: 2s
+        portfolio: 10s
+        recentTrades: 5s
+  
+  ratelimit:
+    enabled: true
+    policies:
+      # Rate limits for critical endpoints
+      orders:
+        limit: ${RATE_LIMIT_ORDERS:30}
+        window: ${RATE_LIMIT_ORDERS_WINDOW:60s}
+        key-by: user  # 'user' or 'ip'
+      wallet-deposit:
+        limit: ${RATE_LIMIT_WALLET_DEPOSIT:10}
+        window: ${RATE_LIMIT_WALLET_DEPOSIT_WINDOW:60s}
+        key-by: user
+      wallet-withdraw:
+        limit: ${RATE_LIMIT_WALLET_WITHDRAW:5}
+        window: ${RATE_LIMIT_WALLET_WITHDRAW_WINDOW:60s}
+        key-by: user
 
 management:
   endpoints:

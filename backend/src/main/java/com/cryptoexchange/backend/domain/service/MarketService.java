@@ -4,6 +4,7 @@ import com.cryptoexchange.backend.domain.exception.NotFoundException;
 import com.cryptoexchange.backend.domain.model.Asset;
 import com.cryptoexchange.backend.domain.model.Market;
 import com.cryptoexchange.backend.domain.repository.MarketRepository;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +39,7 @@ public class MarketService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "markets", key = "'all'")
     public List<Market> listActiveMarkets() {
         return marketRepository.findByActiveTrue();
     }
