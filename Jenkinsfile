@@ -72,7 +72,7 @@ pipeline {
                     }
                     
                     env.TEST_HOST = testHost
-                    env.SPRING_DATASOURCE_URL = "jdbc:postgresql://${testHost}:5434/crypto_exchange_test"
+                    env.SPRING_DATASOURCE_URL = "jdbc:postgresql://${testHost}:5434/crypto_exchange_test?connectTimeout=10&socketTimeout=30"
                     env.SPRING_DATASOURCE_USERNAME = "postgres"
                     env.SPRING_DATASOURCE_PASSWORD = "postgres"
                     env.REDIS_HOST = testHost
@@ -164,6 +164,20 @@ pipeline {
                     fi
                     
                     echo "All test services are ready"
+                    
+                    # Give services a moment to fully stabilize
+                    echo "Waiting 3 seconds for services to stabilize..."
+                    sleep 3
+                    
+                    # Verify PostgreSQL is actually accepting connections
+                    echo "Verifying PostgreSQL is accepting connections..."
+                    if docker exec test-postgres psql -U postgres -d crypto_exchange_test -c "SELECT version();" > /dev/null 2>&1; then
+                        echo "✓ PostgreSQL is ready and accepting connections"
+                    else
+                        echo "✗ PostgreSQL is not accepting connections"
+                        docker logs test-postgres | tail -20
+                        exit 1
+                    fi
                 '''
             }
         }
@@ -171,14 +185,67 @@ pipeline {
         stage('Backend: Build & Test') {
             steps {
                 script {
+                    // Determine the best connection URL for PostgreSQL
+                    def pgUrl = env.SPRING_DATASOURCE_URL
+                    
+                    // Test connectivity and determine best connection method
+                    def connectionTest = sh(
+                        script: '''
+                            # Test localhost connection first (most common case)
+                            if command -v nc > /dev/null 2>&1 && timeout 5 nc -z localhost 5434 2>/dev/null; then
+                                echo "localhost:5434"
+                            # Fallback: try container IP
+                            elif docker ps | grep -q test-postgres; then
+                                pg_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' test-postgres 2>/dev/null || echo "")
+                                if [ -n "$pg_ip" ] && command -v nc > /dev/null 2>&1 && timeout 5 nc -z "$pg_ip" 5432 2>/dev/null; then
+                                    echo "${pg_ip}:5432"
+                                else
+                                    echo "${TEST_HOST:-localhost}:5434"
+                                fi
+                            else
+                                echo "${TEST_HOST:-localhost}:5434"
+                            fi
+                        ''',
+                        returnStdout: true
+                    ).trim()
+                    
+                    // Extract host and port from connection test result
+                    def (host, port) = connectionTest.split(':')
+                    pgUrl = "jdbc:postgresql://${host}:${port}/crypto_exchange_test?connectTimeout=10&socketTimeout=30"
+                    env.SPRING_DATASOURCE_URL = pgUrl
+                    
+                    echo "Using PostgreSQL connection URL: ${pgUrl}"
+                    
                     // Verify services are accessible before running tests
                     sh '''
                         echo "=== Verifying service connectivity ==="
+                        echo "TEST_HOST: ${TEST_HOST:-localhost}"
+                        echo "SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}"
+                        
+                        # Test PostgreSQL connection
                         echo "Testing PostgreSQL connection..."
                         if command -v nc > /dev/null 2>&1; then
-                            nc -z ${TEST_HOST:-localhost} 5434 && echo "✓ PostgreSQL reachable" || echo "✗ PostgreSQL not reachable"
-                        else
-                            echo "nc not available, skipping connectivity test"
+                            # Extract host and port from URL
+                            pg_url="${SPRING_DATASOURCE_URL}"
+                            if echo "$pg_url" | grep -q "jdbc:postgresql://"; then
+                                pg_conn=$(echo "$pg_url" | sed 's/.*jdbc:postgresql:\/\///' | sed 's/\/.*//')
+                                pg_host=$(echo "$pg_conn" | cut -d: -f1)
+                                pg_port=$(echo "$pg_conn" | cut -d: -f2)
+                                if timeout 5 nc -z "$pg_host" "$pg_port" 2>/dev/null; then
+                                    echo "✓ PostgreSQL reachable at $pg_host:$pg_port"
+                                else
+                                    echo "✗ PostgreSQL not reachable at $pg_host:$pg_port"
+                                fi
+                            fi
+                        fi
+                        
+                        # Verify database exists and is accessible
+                        if docker ps | grep -q test-postgres; then
+                            if docker exec test-postgres psql -U postgres -d crypto_exchange_test -c "SELECT 1" > /dev/null 2>&1; then
+                                echo "✓ Database 'crypto_exchange_test' exists and is accessible"
+                            else
+                                echo "✗ Database 'crypto_exchange_test' not accessible"
+                            fi
                         fi
                         
                         echo "Testing Redis connection..."
