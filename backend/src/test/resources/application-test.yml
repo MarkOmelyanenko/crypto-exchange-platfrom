@@ -17,6 +17,8 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+    # Ensure JPA waits for Flyway to complete
+    defer-datasource-initialization: false
   
   data:
     redis:
@@ -26,12 +28,14 @@ spring:
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
   
-  # Ensure Flyway runs migrations in tests
+  # Ensure Flyway runs migrations in tests before Hibernate validation
   flyway:
     enabled: true
     baseline-on-migrate: true
     baseline-version: 0
     locations: classpath:db/migration
+    validate-on-migrate: true
+    clean-disabled: true
 
 # Disable health checks during tests to speed up startup
 management:

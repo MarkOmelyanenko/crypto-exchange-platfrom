@@ -17,13 +17,17 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+    # Ensure JPA waits for Flyway to complete
+    defer-datasource-initialization: false
   
-  # Ensure Flyway runs migrations in CI
+  # Ensure Flyway runs migrations in CI before Hibernate validation
   flyway:
     enabled: true
     baseline-on-migrate: true
     baseline-version: 0
     locations: classpath:db/migration
+    validate-on-migrate: true
+    clean-disabled: true
 
 management:
   endpoint:
