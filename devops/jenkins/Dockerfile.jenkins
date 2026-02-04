@@ -21,7 +21,14 @@ RUN apt-get update && \
 RUN curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose && \
     chmod +x /usr/local/bin/docker-compose
 
+# Install Node.js and npm (for frontend builds)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g npm@latest && \
+    rm -rf /var/lib/apt/lists/*
+
 # Verify installations
 RUN docker --version && docker compose version || echo "Docker Compose v2 may not be available"
+RUN node --version && npm --version
 
 USER jenkins

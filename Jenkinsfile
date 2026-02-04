@@ -296,11 +296,24 @@ pipeline {
             }
             steps {
                 dir('frontend') {
-                    sh '''
-                        echo "Installing frontend dependencies..."
-                        npm ci
-                    '''
                     script {
+                        // Check if npm is available
+                        def npmAvailable = sh(
+                            script: 'command -v npm > /dev/null 2>&1',
+                            returnStatus: true
+                        ) == 0
+                        
+                        if (!npmAvailable) {
+                            echo "WARNING: npm not found. Skipping frontend build."
+                            echo "To enable frontend builds, install Node.js in the Jenkins container."
+                            return
+                        }
+                        
+                        sh '''
+                            echo "Installing frontend dependencies..."
+                            npm ci
+                        '''
+                        
                         // Try to run tests, but don't fail if test script doesn't exist
                         def testScript = sh(
                             script: 'npm run test 2>&1 || echo "No test script found"',
@@ -309,11 +322,12 @@ pipeline {
                         if (testScript != 0) {
                             echo "No test script found or tests skipped, proceeding with build..."
                         }
+                        
+                        sh '''
+                            echo "Building frontend..."
+                            npm run build
+                        '''
                     }
-                    sh '''
-                        echo "Building frontend..."
-                        npm run build
-                    '''
                 }
             }
         }
