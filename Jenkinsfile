@@ -369,16 +369,24 @@ pipeline {
                         max_wait=30
                         waited=0
                         while [ $waited -lt $max_wait ]; do
-                            if docker exec ci-postgres psql -U postgres -lqt 2>/dev/null | cut -d \\| -f 1 | grep -qw crypto_exchange; then
-                                echo "✓ Database 'crypto_exchange' exists"
+                            # Check if database exists by trying to connect to it
+                            if docker exec ci-postgres psql -U postgres -d crypto_exchange -c "SELECT 1" > /dev/null 2>&1; then
+                                echo "✓ Database 'crypto_exchange' exists and is accessible"
                                 break
+                            fi
+                            # Also try to create it if it doesn't exist (in case POSTGRES_DB didn't work)
+                            if [ $waited -eq 5 ]; then
+                                echo "Attempting to create database if it doesn't exist..."
+                                docker exec ci-postgres psql -U postgres -c "CREATE DATABASE crypto_exchange;" 2>/dev/null || true
                             fi
                             sleep 1
                             waited=$((waited + 1))
                         done
                         if [ $waited -ge $max_wait ]; then
                             echo "✗ Database 'crypto_exchange' was not created within timeout"
-                            docker logs ci-postgres
+                            echo "Listing all databases:"
+                            docker exec ci-postgres psql -U postgres -l || true
+                            docker logs ci-postgres | tail -20
                             exit 1
                         fi
                     '''

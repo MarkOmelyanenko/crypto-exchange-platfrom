@@ -9,18 +9,18 @@ services:
     image: postgres:16
     container_name: ci-postgres
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-crypto_exchange}
+      POSTGRES_DB: crypto_exchange
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
       - "5433:5432"  # Different port to avoid conflicts with local dev
     healthcheck:
-      # Check that PostgreSQL is ready AND can connect to the database
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-crypto_exchange}"]
+      # First check that PostgreSQL is ready, then verify database exists
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} && psql -U ${POSTGRES_USER:-postgres} -d crypto_exchange -c 'SELECT 1'"]
       interval: 5s
       timeout: 3s
       retries: 10
-      start_period: 10s
+      start_period: 15s
     networks:
       - ci-network
 
