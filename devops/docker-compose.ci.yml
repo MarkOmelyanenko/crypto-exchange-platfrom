@@ -1,34 +1,24 @@
 version: '3.8'
 
-# CI-specific docker-compose for smoke tests
-# This file is used by Jenkins pipeline for health checks
-# It uses minimal services needed for backend to start
-
 services:
   postgres:
     image: postgres:16
     container_name: ci-postgres
     environment:
       POSTGRES_DB: crypto_exchange
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-    ports:
-      - "5433:5432"  # Different port to avoid conflicts with local dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     healthcheck:
-      # First check that PostgreSQL is ready, then verify database exists
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} && psql -U ${POSTGRES_USER:-postgres} -d crypto_exchange -c 'SELECT 1'"]
+      test: ["CMD-SHELL", "pg_isready -U postgres && psql -U postgres -d crypto_exchange -c 'SELECT 1'"]
       interval: 5s
       timeout: 3s
       retries: 10
-      start_period: 15s
     networks:
       - ci-network
 
   redis:
     image: redis:7
     container_name: ci-redis
-    ports:
-      - "6380:6379"  # Different port to avoid conflicts
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -57,20 +47,18 @@ services:
     depends_on:
       zookeeper:
         condition: service_healthy
-    ports:
-      - "9093:9092"  # Different port to avoid conflicts
     environment:
       KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
-      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://localhost:9093,PLAINTEXT_INTERNAL://kafka:29092"
-      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:29092"
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT"
-      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT_INTERNAL"
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_LISTENERS: PLAINTEXT_INTERNAL://0.0.0.0:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
     healthcheck:
-      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:29092"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -87,28 +75,11 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-    ports:
-      - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: ci
-      # Use the database name that matches POSTGRES_DB (explicitly set to avoid defaults)
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/crypto_exchange
-      # Override any default database name from application.yml
-      SPRING_DATASOURCE_DATABASE: crypto_exchange
-      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      # Ensure Flyway runs migrations before Hibernate validation
-      SPRING_FLYWAY_ENABLED: "true"
-      SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
-      SPRING_FLYWAY_BASELINE_VERSION: "0"
-      SPRING_FLYWAY_VALIDATE_ON_MIGRATE: "true"
-      SPRING_FLYWAY_OUT_OF_ORDER: "false"
-      SPRING_FLYWAY_CLEAN_DISABLED: "true"
-      # Enable debug logging to see Flyway activity
-      LOGGING_LEVEL_ORG_FLYWAYDB: "DEBUG"
-      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_BOOT_AUTOCONFIGURE_FLYWAY: "DEBUG"
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
       REDIS_HOST: redis
       REDIS_PORT: 6379
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
