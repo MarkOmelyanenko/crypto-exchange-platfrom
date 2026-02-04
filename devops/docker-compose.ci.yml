@@ -15,10 +15,12 @@ services:
     ports:
       - "5433:5432"  # Different port to avoid conflicts with local dev
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      # Check that PostgreSQL is ready AND can connect to the database
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-crypto_exchange}"]
       interval: 5s
       timeout: 3s
-      retries: 5
+      retries: 10
+      start_period: 10s
     networks:
       - ci-network
 

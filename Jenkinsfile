@@ -363,6 +363,24 @@ pipeline {
                             echo "ERROR: Neither 'docker compose' nor 'docker-compose' is available"
                             exit 1
                         fi
+                        
+                        # Wait for PostgreSQL to be fully ready (including database creation)
+                        echo "Waiting for PostgreSQL database to be created..."
+                        max_wait=30
+                        waited=0
+                        while [ $waited -lt $max_wait ]; do
+                            if docker exec ci-postgres psql -U postgres -lqt 2>/dev/null | cut -d \\| -f 1 | grep -qw crypto_exchange; then
+                                echo "✓ Database 'crypto_exchange' exists"
+                                break
+                            fi
+                            sleep 1
+                            waited=$((waited + 1))
+                        done
+                        if [ $waited -ge $max_wait ]; then
+                            echo "✗ Database 'crypto_exchange' was not created within timeout"
+                            docker logs ci-postgres
+                            exit 1
+                        fi
                     '''
                     
                     // Wait for backend to be healthy (give it more time for Flyway migrations)
