@@ -6,14 +6,14 @@ pipeline {
             steps {
                 dir('backend') {
                     // Skip tests requiring external services (DB, Redis, Kafka)
-                    // Exclude: Integration tests and SpringBootTest context loading tests
+                    // Exclude: Integration tests, SpringBootTest context loading tests, and Testcontainers-based tests
                     // Allow build to succeed if no tests match (no pure unit tests exist yet)
                     sh '''
+                        export TESTCONTAINERS_RYUK_DISABLED=true
+                        export TESTCONTAINERS_CHECKS_DISABLE=1
                         ./mvnw -B -ntp clean test \
-                            -Dtest='!*IntegrationTest,!BackendApplicationTests' \
-                            -Dsurefire.failIfNoSpecifiedTests=false || \
-                        mvn -B -ntp clean test \
-                            -Dtest='!*IntegrationTest,!BackendApplicationTests' \
+                            -Dtest='!*IntegrationTest,!BackendApplicationTests,!WalletServiceTest,!WalletServiceConcurrencyTest' \
+                            -Dtestcontainers.ryuk.disabled=true \
                             -Dsurefire.failIfNoSpecifiedTests=false
                     '''
                 }
@@ -40,7 +40,7 @@ pipeline {
         stage('Package') {
             steps {
                 dir('backend') {
-                    sh './mvnw -B -ntp -DskipTests package || mvn -B -ntp -DskipTests package'
+                    sh './mvnw -B -ntp -DskipTests package'
                     archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
                 }
             }
