@@ -7,16 +7,31 @@ pipeline {
                 dir('backend') {
                     // Skip tests requiring external services (DB, Redis, Kafka)
                     // Exclude: Integration tests and SpringBootTest context loading tests
+                    // Allow build to succeed if no tests match (no pure unit tests exist yet)
                     sh '''
-                        ./mvnw -B -ntp clean test -Dtest='!*IntegrationTest,!BackendApplicationTests' || \
-                        mvn -B -ntp clean test -Dtest='!*IntegrationTest,!BackendApplicationTests'
+                        ./mvnw -B -ntp clean test \
+                            -Dtest='!*IntegrationTest,!BackendApplicationTests' \
+                            -Dsurefire.failIfNoSpecifiedTests=false || \
+                        mvn -B -ntp clean test \
+                            -Dtest='!*IntegrationTest,!BackendApplicationTests' \
+                            -Dsurefire.failIfNoSpecifiedTests=false
                     '''
                 }
             }
             post {
                 always {
                     dir('backend') {
-                        junit 'target/surefire-reports/*.xml'
+                        script {
+                            def reportCount = sh(
+                                script: 'find target/surefire-reports -name "*.xml" 2>/dev/null | wc -l',
+                                returnStdout: true
+                            ).trim().toInteger()
+                            if (reportCount > 0) {
+                                junit 'target/surefire-reports/*.xml'
+                            } else {
+                                echo 'No test reports found - skipping JUnit report collection'
+                            }
+                        }
                     }
                 }
             }
