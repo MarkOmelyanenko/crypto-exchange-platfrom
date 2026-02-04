@@ -153,6 +153,10 @@ class DomainIntegrationTest {
         Market market = marketService.getMarketBySymbol("BTC/USDT");
         BigDecimal price = new BigDecimal("50000.00");
         BigDecimal amount = new BigDecimal("0.1");
+        
+        // Deposit funds before placing order (BUY order requires quote currency)
+        BigDecimal requiredFunds = price.multiply(amount);
+        walletService.deposit(user.getId(), market.getQuoteAsset().getId(), requiredFunds);
 
         // When
         Order order = orderService.placeOrder(
@@ -173,6 +177,10 @@ class DomainIntegrationTest {
         assertThat(order.getAmount()).isEqualByComparingTo(amount);
         assertThat(order.getFilledAmount()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(order.getVersion()).isEqualTo(0);
+        
+        // Verify funds were reserved
+        Balance balance = walletService.getBalance(user.getId(), market.getQuoteAsset().getId());
+        assertThat(balance.getLocked()).isEqualByComparingTo(requiredFunds);
     }
 
     @Test
@@ -198,13 +206,20 @@ class DomainIntegrationTest {
         // Given
         UserAccount user = userService.createUser("trader3@example.com");
         Market market = marketService.getMarketBySymbol("BTC/USDT");
+        BigDecimal price = new BigDecimal("50000.00");
+        BigDecimal amount = new BigDecimal("0.1");
+        
+        // Deposit funds before placing order
+        BigDecimal requiredFunds = price.multiply(amount);
+        walletService.deposit(user.getId(), market.getQuoteAsset().getId(), requiredFunds);
+        
         Order order = orderService.placeOrder(
             user.getId(),
             market.getId(),
             OrderSide.BUY,
             OrderType.LIMIT,
-            new BigDecimal("50000.00"),
-            new BigDecimal("0.1")
+            price,
+            amount
         );
 
         // When
@@ -212,6 +227,11 @@ class DomainIntegrationTest {
 
         // Then
         assertThat(canceledOrder.getStatus()).isEqualTo(OrderStatus.CANCELED);
+        
+        // Verify funds were released
+        Balance balance = walletService.getBalance(user.getId(), market.getQuoteAsset().getId());
+        assertThat(balance.getAvailable()).isEqualByComparingTo(requiredFunds);
+        assertThat(balance.getLocked()).isEqualByComparingTo(BigDecimal.ZERO);
     }
 
     @Test
@@ -220,13 +240,22 @@ class DomainIntegrationTest {
         UserAccount user = userService.createUser("trader4@example.com");
         Market market = marketService.getMarketBySymbol("BTC/USDT");
         
+        // Deposit funds for BUY order (quote currency)
+        BigDecimal buyPrice = new BigDecimal("50000.00");
+        BigDecimal buyAmount = new BigDecimal("0.1");
+        walletService.deposit(user.getId(), market.getQuoteAsset().getId(), buyPrice.multiply(buyAmount));
+        
+        // Deposit funds for SELL order (base currency)
+        BigDecimal sellAmount = new BigDecimal("0.2");
+        walletService.deposit(user.getId(), market.getBaseAsset().getId(), sellAmount);
+        
         orderService.placeOrder(
             user.getId(),
             market.getId(),
             OrderSide.BUY,
             OrderType.LIMIT,
-            new BigDecimal("50000.00"),
-            new BigDecimal("0.1")
+            buyPrice,
+            buyAmount
         );
         
         orderService.placeOrder(
@@ -235,7 +264,7 @@ class DomainIntegrationTest {
             OrderSide.SELL,
             OrderType.LIMIT,
             new BigDecimal("51000.00"),
-            new BigDecimal("0.2")
+            sellAmount
         );
 
         // When

@@ -1,5 +1,8 @@
 package com.cryptoexchange.backend.domain.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -18,10 +21,12 @@ public class Balance {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
+    @JsonIgnore
     private UserAccount user;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "asset_id", nullable = false)
+    @JsonIgnore
     private Asset asset;
 
     @Column(nullable = false, precision = 38, scale = 18)
@@ -29,6 +34,11 @@ public class Balance {
 
     @Column(nullable = false, precision = 38, scale = 18)
     private BigDecimal locked;
+
+    @Version
+    @Column(nullable = false)
+    @JsonIgnore
+    private Integer version;
 
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
@@ -43,6 +53,7 @@ public class Balance {
     public Balance() {
         this.available = BigDecimal.ZERO;
         this.locked = BigDecimal.ZERO;
+        this.version = 0;
     }
 
     public Balance(UserAccount user, Asset asset) {
@@ -92,12 +103,36 @@ public class Balance {
         this.locked = locked;
     }
 
+    public Integer getVersion() {
+        return version;
+    }
+
+    public void setVersion(Integer version) {
+        this.version = version;
+    }
+
     public OffsetDateTime getUpdatedAt() {
         return updatedAt;
     }
 
     public void setUpdatedAt(OffsetDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    // Helper methods for JSON serialization
+    @JsonProperty("currency")
+    @Schema(description = "Currency symbol", example = "USDT", accessMode = Schema.AccessMode.READ_ONLY, type = "string")
+    public String getCurrency() {
+        if (asset == null) {
+            return null;
+        }
+        try {
+            return asset.getSymbol();
+        } catch (Exception e) {
+            // Handle lazy loading issues gracefully during schema generation or when outside transaction
+            // This can happen when SpringDoc tries to introspect the entity outside of a transaction
+            return null;
+        }
     }
 
     // Equals and HashCode based on ID
