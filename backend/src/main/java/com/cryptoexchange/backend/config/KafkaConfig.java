@@ -1,5 +1,7 @@
 package com.cryptoexchange.backend.config;
 
+import com.cryptoexchange.backend.domain.event.MarketTickEvent;
+import com.cryptoexchange.backend.domain.event.MarketTradeEvent;
 import com.cryptoexchange.backend.domain.event.OrderCreatedEvent;
 import com.cryptoexchange.backend.domain.event.TradeExecutedEvent;
 import org.apache.kafka.clients.admin.AdminClientConfig;
@@ -45,6 +47,12 @@ public class KafkaConfig {
     @Value("${app.kafka.topics.trades-dlt:trades.DLT}")
     private String tradesDltTopic;
 
+    @Value("${app.kafka.topics.market-ticks:market.ticks}")
+    private String marketTicksTopic;
+
+    @Value("${app.kafka.topics.market-trades:market.trades}")
+    private String marketTradesTopic;
+
     // Topic configuration
     @Bean
     public KafkaAdmin kafkaAdmin() {
@@ -72,6 +80,16 @@ public class KafkaConfig {
     @Bean
     public NewTopic tradesDltTopic() {
         return new NewTopic(tradesDltTopic, 1, (short) 1);
+    }
+
+    @Bean
+    public NewTopic marketTicksTopic() {
+        return new NewTopic(marketTicksTopic, 1, (short) 1);
+    }
+
+    @Bean
+    public NewTopic marketTradesTopic() {
+        return new NewTopic(marketTradesTopic, 1, (short) 1);
     }
 
     // Producer configuration
@@ -109,6 +127,42 @@ public class KafkaConfig {
     @Bean
     public KafkaTemplate<String, TradeExecutedEvent> tradeEventKafkaTemplate() {
         return new KafkaTemplate<>(tradeEventProducerFactory());
+    }
+
+    @Bean
+    public ProducerFactory<String, MarketTickEvent> marketTickEventProducerFactory() {
+        Map<String, Object> configProps = new HashMap<>();
+        configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
+        configProps.put(ProducerConfig.ACKS_CONFIG, "all");
+        configProps.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
+        configProps.put(ProducerConfig.RETRIES_CONFIG, 3);
+        configProps.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 30000);
+        return new DefaultKafkaProducerFactory<>(configProps);
+    }
+
+    @Bean
+    public ProducerFactory<String, MarketTradeEvent> marketTradeEventProducerFactory() {
+        Map<String, Object> configProps = new HashMap<>();
+        configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
+        configProps.put(ProducerConfig.ACKS_CONFIG, "all");
+        configProps.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
+        configProps.put(ProducerConfig.RETRIES_CONFIG, 3);
+        configProps.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 30000);
+        return new DefaultKafkaProducerFactory<>(configProps);
+    }
+
+    @Bean
+    public KafkaTemplate<String, MarketTickEvent> marketTickEventKafkaTemplate() {
+        return new KafkaTemplate<>(marketTickEventProducerFactory());
+    }
+
+    @Bean
+    public KafkaTemplate<String, MarketTradeEvent> marketTradeEventKafkaTemplate() {
+        return new KafkaTemplate<>(marketTradeEventProducerFactory());
     }
 
     // Consumer configuration

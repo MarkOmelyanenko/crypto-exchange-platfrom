@@ -53,6 +53,8 @@ app:
       trades: trades
       orders-dlt: orders.DLT
       trades-dlt: trades.DLT
+      market-ticks: market.ticks
+      market-trades: market.trades
   
   redis:
     cache:
@@ -80,6 +82,30 @@ app:
         limit: ${RATE_LIMIT_WALLET_WITHDRAW:5}
         window: ${RATE_LIMIT_WALLET_WITHDRAW_WINDOW:60s}
         key-by: user
+  
+  simulator:
+    enabled: ${SIMULATOR_ENABLED:false}
+    tick-interval-ms: ${SIMULATOR_TICK_INTERVAL_MS:1000}
+    seed: ${SIMULATOR_SEED:42}
+    markets: ${SIMULATOR_MARKETS:BTC-USDT,ETH-USDT}
+    spread-bps: ${SIMULATOR_SPREAD_BPS:8}
+    avg-trades-per-tick: ${SIMULATOR_AVG_TRADES_PER_TICK:2}
+    min-qty: ${SIMULATOR_MIN_QTY:0.001}
+    max-qty: ${SIMULATOR_MAX_QTY:1.0}
+    persist-every-n-ticks: ${SIMULATOR_PERSIST_EVERY_N_TICKS:1}
+    auto-start: ${SIMULATOR_AUTO_START:true}
+    redis:
+      ticker-ttl: ${SIMULATOR_REDIS_TICKER_TTL:60}
+      trades-ttl: ${SIMULATOR_REDIS_TRADES_TTL:60}
+      max-recent-trades: ${SIMULATOR_REDIS_MAX_RECENT_TRADES:50}
+    # Per-market initial prices (optional, defaults provided)
+    # initial-prices:
+    #   BTC-USDT: 65000
+    #   ETH-USDT: 3500
+    # Per-market volatility (optional, default 0.012 = 1.2%)
+    # volatility:
+    #   BTC-USDT: 0.012
+    #   ETH-USDT: 0.015
 
 management:
   endpoints:

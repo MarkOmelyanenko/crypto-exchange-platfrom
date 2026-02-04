@@ -75,6 +75,14 @@ public class RedisConfig {
     }
 
     @Bean
+    public ObjectMapper objectMapper() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new JavaTimeModule());
+        // Don't enable default typing for general use (only for Redis cache serialization)
+        return objectMapper;
+    }
+
+    @Bean
     public CacheManager cacheManager(RedisConnectionFactory connectionFactory) {
         RedisCacheConfiguration defaultConfig = createCacheConfiguration(parseDuration(defaultTtl));
 
