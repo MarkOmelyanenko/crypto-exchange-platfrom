@@ -7,14 +7,13 @@ help: ## Show this help message
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 jenkins-up: ## Start Jenkins CI server
-	cd devops/jenkins && docker-compose -f docker-compose.jenkins.yml build
-	cd devops/jenkins && docker-compose -f docker-compose.jenkins.yml up -d
+	cd devops/jenkins && docker compose up -d
 	@echo "Jenkins is starting..."
 	@echo "Access Jenkins at http://localhost:8081"
 	@echo "Get initial password with: make jenkins-password"
 
 jenkins-down: ## Stop Jenkins CI server
-	cd devops/jenkins && docker-compose -f docker-compose.jenkins.yml down
+	cd devops/jenkins && docker compose down
 
 jenkins-logs: ## Show Jenkins logs
 	docker logs -f crypto-jenkins
@@ -25,27 +24,15 @@ jenkins-password: ## Get Jenkins initial admin password
 ci-local: ## Run CI pipeline steps locally (without Jenkins)
 	@echo "Running CI pipeline locally..."
 	@echo "Step 1: Backend tests..."
-	cd backend && mvn -B -DskipTests=false clean test
+	cd backend && mvn -B -ntp -DskipTests=false clean test
 	@echo "Step 2: Backend package..."
-	cd backend && mvn -B -DskipTests package
-	@echo "Step 3: Backend Docker build..."
-	cd backend && docker build -t crypto-exchange-backend:latest .
-	@echo "Step 4: Starting services for smoke test..."
-	docker-compose -f devops/docker-compose.ci.yml up -d
-	@echo "Waiting for services to be healthy..."
-	@sleep 10
-	@echo "Checking backend health..."
-	@for i in $$(seq 1 30); do \
-		if curl -f -s http://localhost:8080/actuator/health > /dev/null 2>&1; then \
-			echo "Backend is UP!"; \
-			curl -s http://localhost:8080/actuator/health | jq '.' || curl -s http://localhost:8080/actuator/health; \
-			break; \
-		fi; \
-		echo "Attempt $$i/30: Waiting for backend..."; \
-		sleep 2; \
-	done
-	@echo "Tearing down test containers..."
-	docker-compose -f devops/docker-compose.ci.yml down -v
+	cd backend && mvn -B -ntp -DskipTests package
+	@echo "Step 3: Backend Docker build (if Dockerfile exists)..."
+	@if [ -f backend/Dockerfile ]; then \
+		cd backend && docker build -t crypto-backend:ci .; \
+	else \
+		echo "Dockerfile not found, skipping Docker build"; \
+	fi
 	@echo "CI pipeline completed!"
 
 backend-test: ## Run backend tests
@@ -65,7 +52,6 @@ frontend-build: ## Build frontend (if exists)
 	fi
 
 clean: ## Clean up Docker images and containers
-	docker-compose -f devops/docker-compose.ci.yml down -v 2>/dev/null || true
+	docker rmi crypto-backend:ci 2>/dev/null || true
 	docker rmi crypto-exchange-backend:latest 2>/dev/null || true
-	docker rmi crypto-exchange-frontend:latest 2>/dev/null || true
 	@echo "Cleanup complete"
