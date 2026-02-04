@@ -33,18 +33,19 @@ pipeline {
         }
 
         stage('Docker Build') {
-            when {
-                fileExists 'backend/Dockerfile'
-            }
             steps {
                 script {
-                    try {
-                        sh 'docker --version'
-                        dir('backend') {
-                            sh 'docker build -t crypto-backend:ci .'
+                    if (fileExists('backend/Dockerfile')) {
+                        try {
+                            sh 'docker --version'
+                            dir('backend') {
+                                sh 'docker build -t crypto-backend:ci .'
+                            }
+                        } catch (Exception e) {
+                            echo "Docker not available, skipping image build: ${e.message}"
                         }
-                    } catch (Exception e) {
-                        echo "Docker not available, skipping image build: ${e.message}"
+                    } else {
+                        echo "Dockerfile not found, skipping Docker build"
                     }
                 }
             }
