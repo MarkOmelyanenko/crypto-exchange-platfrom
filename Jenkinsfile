@@ -2,16 +2,14 @@ pipeline {
     agent any
 
     stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
         stage('Build & Test') {
             steps {
                 dir('backend') {
-                    sh './mvnw -B -ntp clean test || mvn -B -ntp clean test'
+                    // Skip integration tests (those requiring containers)
+                    sh '''
+                        ./mvnw -B -ntp clean test -Dtest='!*IntegrationTest' || \
+                        mvn -B -ntp clean test -Dtest='!*IntegrationTest'
+                    '''
                 }
             }
             post {
