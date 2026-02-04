@@ -3,6 +3,21 @@
 # This profile is used during CI/CD pipeline smoke tests
 
 spring:
+  datasource:
+    # Explicitly set database URL for CI (required)
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/crypto_exchange}
+    username: ${SPRING_DATASOURCE_USERNAME:${POSTGRES_USER:-postgres}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${POSTGRES_PASSWORD:-postgres}}
+    driver-class-name: org.postgresql.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    # Explicitly set dialect to avoid connection issues during initialization
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  
   # Ensure Flyway runs migrations in CI
   flyway:
     enabled: true
