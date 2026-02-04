@@ -1,6 +1,6 @@
 package com.cryptoexchange.backend.domain.service;
 
-import com.cryptoexchange.backend.domain.event.OrderCreatedEvent;
+import com.cryptoexchange.backend.domain.event.DomainOrderCreated;
 import com.cryptoexchange.backend.domain.exception.InvalidOrderException;
 import com.cryptoexchange.backend.domain.exception.NotFoundException;
 import com.cryptoexchange.backend.domain.model.Market;
@@ -13,9 +13,9 @@ import com.cryptoexchange.backend.domain.repository.OrderRepository;
 import com.cryptoexchange.backend.domain.util.MoneyUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,16 +33,16 @@ public class OrderService {
     private final UserService userService;
     private final MarketService marketService;
     private final WalletService walletService;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final ApplicationEventPublisher eventPublisher;
 
     public OrderService(OrderRepository orderRepository, UserService userService, 
                        MarketService marketService, WalletService walletService,
-                       KafkaTemplate<String, Object> kafkaTemplate) {
+                       ApplicationEventPublisher eventPublisher) {
         this.orderRepository = orderRepository;
         this.userService = userService;
         this.marketService = marketService;
         this.walletService = walletService;
-        this.kafkaTemplate = kafkaTemplate;
+        this.eventPublisher = eventPublisher;
     }
 
     public Order placeOrder(UUID userId, UUID marketId, OrderSide side, OrderType type, 
@@ -93,15 +93,9 @@ public class OrderService {
             throw new InvalidOrderException("Failed to reserve funds: " + e.getMessage());
         }
         
-        // Publish OrderCreatedEvent to trigger matching (keyed by marketSymbol for partition affinity)
-        try {
-            OrderCreatedEvent event = new OrderCreatedEvent(order.getId(), market.getId(), market.getSymbol());
-            kafkaTemplate.send("orders", market.getSymbol(), event);
-            log.debug("Published OrderCreatedEvent for order {}", order.getId());
-        } catch (Exception e) {
-            // Log error but don't fail order creation - matching can be triggered manually if needed
-            log.error("Failed to publish OrderCreatedEvent for order {}: {}", order.getId(), e.getMessage());
-        }
+        // Publish domain event - will be sent to Kafka AFTER transaction commit
+        eventPublisher.publishEvent(new DomainOrderCreated(this, order.getId(), market.getSymbol(), side.name()));
+        log.debug("Published DomainOrderCreated event for order {} (will be sent to Kafka after commit)", order.getId());
         
         return order;
     }

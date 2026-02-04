@@ -1,6 +1,6 @@
 package com.cryptoexchange.backend.domain.service;
 
-import com.cryptoexchange.backend.domain.event.TradeExecutedEvent;
+import com.cryptoexchange.backend.domain.event.DomainTradeExecuted;
 import com.cryptoexchange.backend.domain.model.Market;
 import com.cryptoexchange.backend.domain.model.Order;
 import com.cryptoexchange.backend.domain.model.OrderSide;
@@ -11,12 +11,13 @@ import com.cryptoexchange.backend.domain.repository.TradeRepository;
 import com.cryptoexchange.backend.domain.util.MoneyUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -40,16 +41,16 @@ public class MatchingEngine {
     private final OrderRepository orderRepository;
     private final TradeRepository tradeRepository;
     private final WalletService walletService;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final ApplicationEventPublisher eventPublisher;
 
     public MatchingEngine(OrderRepository orderRepository, 
                          TradeRepository tradeRepository,
                          WalletService walletService,
-                         KafkaTemplate<String, Object> kafkaTemplate) {
+                         ApplicationEventPublisher eventPublisher) {
         this.orderRepository = orderRepository;
         this.tradeRepository = tradeRepository;
         this.walletService = walletService;
-        this.kafkaTemplate = kafkaTemplate;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -192,23 +193,17 @@ public class MatchingEngine {
             tradePrice, market.getQuoteAsset().getSymbol(),
             makerOrder.getId(), takerOrder.getId());
 
-        // Publish TradeExecutedEvent (optional, for external systems)
-        try {
-            TradeExecutedEvent event = new TradeExecutedEvent(
-                trade.getId(),
-                market.getId(),
-                market.getSymbol(),
-                tradePrice,
-                fillQty,
-                quoteAmount,
-                trade.getExecutedAt()
-            );
-            kafkaTemplate.send("trades", market.getSymbol(), event);
-            log.debug("Published TradeExecutedEvent for trade {}", trade.getId());
-        } catch (Exception e) {
-            // Log error but don't fail trade execution
-            log.error("Failed to publish TradeExecutedEvent for trade {}: {}", trade.getId(), e.getMessage());
-        }
+        // Publish domain event - will be sent to Kafka AFTER transaction commit
+        Instant executedAtInstant = trade.getExecutedAt().toInstant();
+        eventPublisher.publishEvent(new DomainTradeExecuted(
+            this, 
+            trade.getId(), 
+            market.getSymbol(), 
+            tradePrice, 
+            fillQty, 
+            executedAtInstant
+        ));
+        log.debug("Published DomainTradeExecuted event for trade {} (will be sent to Kafka after commit)", trade.getId());
 
         return trade;
     }

@@ -39,9 +39,20 @@ spring:
     consumer:
       group-id: crypto-exchange-sim
       auto-offset-reset: earliest
+      properties:
+        spring.json.trusted.packages: "com.cryptoexchange.backend.domain.event"
     producer:
       properties:
         linger.ms: 5
+
+# Application-specific Kafka configuration
+app:
+  kafka:
+    topics:
+      orders: orders
+      trades: trades
+      orders-dlt: orders.DLT
+      trades-dlt: trades.DLT
 
 management:
   endpoints:
