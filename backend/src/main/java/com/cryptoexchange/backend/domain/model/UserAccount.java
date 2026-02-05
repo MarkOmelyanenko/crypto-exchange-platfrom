@@ -13,8 +13,14 @@ public class UserAccount {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @Column(nullable = false, unique = true, length = 50)
+    private String login;
+
     @Column(nullable = false, unique = true)
     private String email;
+
+    @Column(name = "password_hash", nullable = false)
+    private String passwordHash;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
@@ -38,8 +44,10 @@ public class UserAccount {
     public UserAccount() {
     }
 
-    public UserAccount(String email) {
+    public UserAccount(String login, String email, String passwordHash) {
+        this.login = login;
         this.email = email;
+        this.passwordHash = passwordHash;
     }
 
     // Getters and Setters
@@ -51,12 +59,28 @@ public class UserAccount {
         this.id = id;
     }
 
+    public String getLogin() {
+        return login;
+    }
+
+    public void setLogin(String login) {
+        this.login = login;
+    }
+
     public String getEmail() {
         return email;
     }
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getPasswordHash() {
+        return passwordHash;
+    }
+
+    public void setPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
     }
 
     public OffsetDateTime getCreatedAt() {

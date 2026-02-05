@@ -5,6 +5,7 @@ import com.cryptoexchange.backend.domain.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,50 +28,34 @@ public class UserController {
 
     @GetMapping("/me")
     @Operation(summary = "Get current user", description = "Returns the current authenticated user information")
-    public ResponseEntity<UserMeResponse> getCurrentUser(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
-            @RequestParam(required = false) UUID userId) {
-        // TODO: Extract userId from JWT token in production
-        // For now, extract from dev token format "dev-token-{userId}" or use query parameter
-        UUID targetUserId = userId;
-        
-        if (targetUserId == null && authorization != null && authorization.startsWith("Bearer ")) {
-            String token = authorization.substring(7);
-            if (token.startsWith("dev-token-")) {
-                try {
-                    String userIdStr = token.substring("dev-token-".length());
-                    targetUserId = UUID.fromString(userIdStr);
-                } catch (Exception e) {
-                    // Invalid token format, ignore
-                }
-            }
-        }
-        
-        if (targetUserId == null) {
+    public ResponseEntity<UserMeResponse> getCurrentUser(Authentication authentication) {
+        if (authentication == null || authentication.getPrincipal() == null) {
             return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).build();
         }
-        
-        UserAccount user = userService.getUser(targetUserId);
-        return ResponseEntity.ok(new UserMeResponse(
-            user.getId().toString(),
-            user.getEmail(),
-            user.getCreatedAt() != null ? user.getCreatedAt().toString() : null,
-            user.getUpdatedAt() != null ? user.getUpdatedAt().toString() : null
-        ));
+
+        try {
+            UUID userId = UUID.fromString(authentication.getPrincipal().toString());
+            UserAccount user = userService.getUser(userId);
+            return ResponseEntity.ok(new UserMeResponse(
+                user.getId().toString(),
+                user.getLogin(),
+                user.getEmail()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).build();
+        }
     }
 
     // DTO
     public static class UserMeResponse {
         public String id;
+        public String login;
         public String email;
-        public String createdAt;
-        public String updatedAt;
 
-        public UserMeResponse(String id, String email, String createdAt, String updatedAt) {
+        public UserMeResponse(String id, String login, String email) {
             this.id = id;
+            this.login = login;
             this.email = email;
-            this.createdAt = createdAt;
-            this.updatedAt = updatedAt;
         }
     }
 }

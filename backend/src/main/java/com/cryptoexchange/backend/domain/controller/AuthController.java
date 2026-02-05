@@ -1,10 +1,14 @@
 package com.cryptoexchange.backend.domain.controller;
 
-import com.cryptoexchange.backend.domain.service.UserService;
+import com.cryptoexchange.backend.config.JwtService;
+import com.cryptoexchange.backend.domain.model.UserAccount;
+import com.cryptoexchange.backend.domain.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -12,7 +16,6 @@ import org.springframework.web.bind.annotation.*;
 
 /**
  * Authentication endpoints for login and registration.
- * TODO: Implement proper JWT authentication in production.
  */
 @RestController
 @RequestMapping("/api/auth")
@@ -20,95 +23,81 @@ import org.springframework.web.bind.annotation.*;
 @Validated
 public class AuthController {
 
-    private final UserService userService;
+    private final AuthService authService;
+    private final JwtService jwtService;
 
-    public AuthController(UserService userService) {
-        this.userService = userService;
+    public AuthController(AuthService authService, JwtService jwtService) {
+        this.authService = authService;
+        this.jwtService = jwtService;
     }
 
     @PostMapping("/register")
     @Operation(summary = "Register a new user", description = "Creates a new user account")
-    public ResponseEntity<AuthRegisterResponse> register(@Valid @RequestBody AuthRegisterRequest request) {
+    public ResponseEntity<?> register(@Valid @RequestBody AuthRegisterRequest request) {
         try {
-            var user = userService.createUser(request.email);
-            // For now, return a simple token (in production, use JWT)
-            String token = "dev-token-" + user.getId();
+            UserAccount user = authService.register(request.login, request.email, request.password);
+            String token = jwtService.generateToken(user.getId());
             return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new AuthRegisterResponse(user.getId().toString(), user.getEmail(), token));
+                .body(new AuthTokenResponse(token, "Bearer"));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(new AuthRegisterResponse(null, null, null, e.getMessage()));
+                .body(new ErrorResponse("User already exists", e.getMessage()));
         }
     }
 
     @PostMapping("/login")
     @Operation(summary = "Login", description = "Authenticates a user and returns a token")
-    public ResponseEntity<AuthLoginResponse> login(@Valid @RequestBody AuthLoginRequest request) {
+    public ResponseEntity<?> login(@Valid @RequestBody AuthLoginRequest request) {
         try {
-            var user = userService.getUserByEmail(request.email);
-            // For now, return a simple token (in production, use JWT with password verification)
-            String token = "dev-token-" + user.getId();
-            return ResponseEntity.ok(new AuthLoginResponse(user.getId().toString(), user.getEmail(), token));
+            UserAccount user = authService.authenticate(request.loginOrEmail, request.password);
+            String token = jwtService.generateToken(user.getId());
+            return ResponseEntity.ok(new AuthTokenResponse(token, "Bearer"));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(new AuthLoginResponse(null, null, null, "Invalid credentials"));
+                .body(new ErrorResponse("Invalid credentials", null));
         }
     }
 
     // DTOs
     public static class AuthRegisterRequest {
+        @NotBlank(message = "Login is required")
+        @Size(min = 3, max = 50, message = "Login must be between 3 and 50 characters")
+        public String login;
+
         @NotBlank(message = "Email is required")
+        @Email(message = "Email must be valid")
         public String email;
         
         @NotBlank(message = "Password is required")
+        @Size(min = 8, message = "Password must be at least 8 characters")
         public String password;
-    }
-
-    public static class AuthRegisterResponse {
-        public String userId;
-        public String email;
-        public String token;
-        public String message;
-
-        public AuthRegisterResponse(String userId, String email, String token) {
-            this.userId = userId;
-            this.email = email;
-            this.token = token;
-        }
-
-        public AuthRegisterResponse(String userId, String email, String token, String message) {
-            this.userId = userId;
-            this.email = email;
-            this.token = token;
-            this.message = message;
-        }
     }
 
     public static class AuthLoginRequest {
-        @NotBlank(message = "Email is required")
-        public String email;
+        @NotBlank(message = "Login or email is required")
+        public String loginOrEmail;
         
         @NotBlank(message = "Password is required")
         public String password;
     }
 
-    public static class AuthLoginResponse {
-        public String userId;
-        public String email;
-        public String token;
-        public String message;
+    public static class AuthTokenResponse {
+        public String accessToken;
+        public String tokenType;
 
-        public AuthLoginResponse(String userId, String email, String token) {
-            this.userId = userId;
-            this.email = email;
-            this.token = token;
+        public AuthTokenResponse(String accessToken, String tokenType) {
+            this.accessToken = accessToken;
+            this.tokenType = tokenType;
         }
+    }
 
-        public AuthLoginResponse(String userId, String email, String token, String message) {
-            this.userId = userId;
-            this.email = email;
-            this.token = token;
+    public static class ErrorResponse {
+        public String message;
+        public String errors;
+
+        public ErrorResponse(String message, String errors) {
             this.message = message;
+            this.errors = errors;
         }
     }
 }

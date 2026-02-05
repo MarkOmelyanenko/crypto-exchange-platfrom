@@ -5,6 +5,7 @@ import DashboardPage from '../pages/DashboardPage';
 import AssetsPage from '../pages/AssetsPage';
 import TransactionsPage from '../pages/TransactionsPage';
 import App from './App';
+import PrivateRoute from '../shared/components/PrivateRoute';
 
 export const router = createBrowserRouter([
   {
@@ -25,15 +26,27 @@ export const router = createBrowserRouter([
       },
       {
         path: 'dashboard',
-        element: <DashboardPage />,
+        element: (
+          <PrivateRoute>
+            <DashboardPage />
+          </PrivateRoute>
+        ),
       },
       {
         path: 'assets',
-        element: <AssetsPage />,
+        element: (
+          <PrivateRoute>
+            <AssetsPage />
+          </PrivateRoute>
+        ),
       },
       {
         path: 'transactions',
-        element: <TransactionsPage />,
+        element: (
+          <PrivateRoute>
+            <TransactionsPage />
+          </PrivateRoute>
+        ),
       },
       {
         path: '*',

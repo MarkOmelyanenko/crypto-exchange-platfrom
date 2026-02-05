@@ -29,6 +29,11 @@ REDIS_PORT=6379
 # Kafka Configuration (optional)
 KAFKA_BOOTSTRAP_SERVERS=localhost:9092
 
+# JWT Configuration
+# Generate a secure secret using: openssl rand -base64 32
+JWT_SECRET=your-256-bit-secret-key-change-this-in-production-minimum-32-characters
+JWT_EXPIRATION=86400000  # 24 hours in milliseconds
+
 # Rate Limiting
 RATE_LIMIT_ORDERS=30
 RATE_LIMIT_ORDERS_WINDOW=60s
@@ -115,6 +120,45 @@ Health checks include:
 - Redis connectivity (if enabled)
 - Kafka connectivity (if enabled)
 
+## Authentication
+
+The application uses JWT (JSON Web Token) authentication. All protected endpoints require a valid JWT token in the `Authorization` header.
+
+### Authentication Endpoints
+
+- `POST /api/auth/register` - Register a new user
+  - Request body: `{ "login": "username", "email": "user@example.com", "password": "Password123!" }`
+  - Response: `{ "accessToken": "<jwt-token>", "tokenType": "Bearer" }`
+  - Returns 409 if login or email already exists
+
+- `POST /api/auth/login` - Login with login or email
+  - Request body: `{ "loginOrEmail": "username" or "user@example.com", "password": "Password123!" }`
+  - Response: `{ "accessToken": "<jwt-token>", "tokenType": "Bearer" }`
+  - Returns 401 for invalid credentials
+
+- `GET /api/users/me` - Get current authenticated user
+  - Requires: `Authorization: Bearer <token>` header
+  - Response: `{ "id": "...", "login": "...", "email": "..." }`
+  - Returns 401 if unauthenticated
+
+### Using JWT Tokens
+
+After successful login or registration, include the token in all API requests:
+
+```bash
+curl -H "Authorization: Bearer <your-token>" http://localhost:8080/api/users/me
+```
+
+### Security Configuration
+
+- JWT secret key: Configured via `JWT_SECRET` environment variable (default: see `application.yml`)
+  - **Generate a secure secret**: Use `openssl rand -base64 32` to generate a 256-bit (32-byte) secret
+  - The secret must be at least 32 characters for HMAC-SHA256
+  - **Never commit the secret to version control** - use environment variables or secrets management
+- Token expiration: Configured via `JWT_EXPIRATION` in milliseconds (default: 24 hours)
+- Password hashing: Uses BCrypt with strength 10
+- Protected endpoints: All endpoints except `/api/auth/**` require authentication
+
 ## API Endpoints
 
 ### Public Endpoints
@@ -124,7 +168,7 @@ Health checks include:
 - `GET /api/markets/{symbol}/ticks` - Get historical ticks
 - `GET /api/trades` - List trades (requires marketId)
 
-### User Endpoints (require userId parameter)
+### Protected Endpoints (require JWT authentication)
 - `POST /api/orders` - Create order
 - `GET /api/orders` - List my orders
 - `GET /api/orders/{id}` - Get order by ID

@@ -137,3 +137,8 @@ springdoc:
     try-it-out-enabled: true
   default-consumes-media-type: application/json
   default-produces-media-type: application/json
+
+# JWT configuration
+jwt:
+  secret: ${JWT_SECRET:your-256-bit-secret-key-change-this-in-production-minimum-32-characters}
+  expiration: ${JWT_EXPIRATION:86400000}  # 24 hours in milliseconds

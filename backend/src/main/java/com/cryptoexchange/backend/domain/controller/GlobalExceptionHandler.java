@@ -73,7 +73,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgumentException(IllegalArgumentException ex) {
         log.warn("Invalid input: {}", ex.getMessage());
-        ErrorResponse error = new ErrorResponse("INVALID_INPUT", ex.getMessage(), getRequestPath(), getRequestId());
+        String message = ex.getMessage();
+        // Check if it's a duplicate user error
+        if (message != null && (message.contains("already exists") || message.contains("User with"))) {
+            ErrorResponse error = new ErrorResponse("USER_EXISTS", message, getRequestPath(), getRequestId());
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+        }
+        ErrorResponse error = new ErrorResponse("INVALID_INPUT", message, getRequestPath(), getRequestId());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 

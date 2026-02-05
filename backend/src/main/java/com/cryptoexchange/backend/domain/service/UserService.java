@@ -22,14 +22,13 @@ public class UserService {
         this.userAccountRepository = userAccountRepository;
     }
 
+    @Deprecated
     public UserAccount createUser(String email) {
         if (userAccountRepository.findByEmail(email).isPresent()) {
             throw new IllegalArgumentException("User with email " + email + " already exists");
         }
-        UserAccount user = new UserAccount(email);
-        UserAccount saved = userAccountRepository.save(user);
-        log.info("Created user: {} (id: {})", email, saved.getId());
-        return saved;
+        // This method is deprecated - use AuthService.register instead
+        throw new UnsupportedOperationException("Use AuthService.register instead");
     }
 
     @Transactional(readOnly = true)

@@ -4,7 +4,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -20,10 +24,24 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
 
+	private final JwtAuthenticationFilter jwtAuthenticationFilter;
+
+	public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+		this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+	}
+
 	@Bean
 	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 		http
+			// Disable CSRF for stateless JWT authentication
+			.csrf(csrf -> csrf.disable())
+			// Enable CORS for frontend access
+			.cors(cors -> cors.configurationSource(corsConfigurationSource()))
+			// Stateless session management
+			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 			.authorizeHttpRequests(authorize -> authorize
+				// Allow public access to auth endpoints
+				.requestMatchers("/api/auth/**").permitAll()
 				// Allow public access to Swagger UI and OpenAPI endpoints
 				.requestMatchers(
 					"/swagger-ui.html",
@@ -34,15 +52,12 @@ public class SecurityConfig {
 				).permitAll()
 				// Allow public access to Actuator health endpoints
 				.requestMatchers("/actuator/health/**").permitAll()
-				// Allow public access to Actuator info endpoint
 				.requestMatchers("/actuator/info").permitAll()
-				// For development: allow all other requests (remove in production)
-				.anyRequest().permitAll()
+				// All other requests require authentication
+				.anyRequest().authenticated()
 			)
-			// Enable CORS for frontend access
-			.cors(cors -> cors.configurationSource(corsConfigurationSource()))
-			// Disable CSRF for development (enable in production with proper configuration)
-			.csrf(csrf -> csrf.disable())
+			// Add JWT filter before UsernamePasswordAuthenticationFilter
+			.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
 			// Disable HTTP Basic authentication popup
 			.httpBasic(httpBasic -> httpBasic.disable());
 
@@ -61,5 +76,10 @@ public class SecurityConfig {
 		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
 		source.registerCorsConfiguration("/**", configuration);
 		return source;
+	}
+
+	@Bean
+	public PasswordEncoder passwordEncoder() {
+		return new BCryptPasswordEncoder();
 	}
 }

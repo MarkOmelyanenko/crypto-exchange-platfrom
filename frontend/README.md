@@ -90,16 +90,47 @@ const response = await apiClient.get('/api/markets');
 const response = await apiClient.post('/api/orders', orderData);
 ```
 
+## Authentication
+
+The frontend implements end-to-end authentication with JWT tokens:
+
+### Authentication Flow
+
+1. **Registration**: Users can register with login, email, and password (minimum 8 characters)
+2. **Login**: Users can login using either their login or email address
+3. **Token Storage**: JWT access tokens are stored in `localStorage` as `auth_token`
+4. **Protected Routes**: Dashboard, Assets, and Transactions pages require authentication
+5. **Auto-redirect**: Unauthenticated users are redirected to `/login`
+6. **Token Refresh**: On app start, if a token exists, the app attempts to load user data
+
+### Auth Context
+
+The `AuthContext` provides:
+- `user` - Current user object (null if not authenticated)
+- `loading` - Loading state during authentication check
+- `login(credentials)` - Login function
+- `register(userData)` - Registration function
+- `logout()` - Logout function (clears token and redirects)
+- `isAuthenticated` - Boolean indicating authentication status
+
+### API Client
+
+The API client (`apiClient.js`) automatically:
+- Adds `Authorization: Bearer <token>` header to all requests
+- Handles 401 responses by clearing token and redirecting to login
+- Uses base URL from `VITE_API_BASE_URL` environment variable
+
+### User Menu
+
+When authenticated, a user menu appears in the top-right corner showing:
+- User login/email
+- Logout button
+
 ## Features
 
 - React Router for navigation
+- JWT authentication with protected routes
 - Responsive layout with header and sidebar
 - Environment-based API configuration
 - Clean, simple styling with CSS
-
-## Next Steps
-
-- Authentication logic
-- Form handling
-- API integration
-- State management (if needed)
+- Form validation and error handling
