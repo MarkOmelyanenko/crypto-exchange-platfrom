@@ -243,3 +243,45 @@ src/
 
 ### Port Already in Use
 - Change the server port in `application.yml` or set `SERVER_PORT` environment variable
+
+## Dashboard API
+
+The dashboard provides comprehensive portfolio analytics for authenticated users.
+
+### Dashboard Endpoints
+
+- `GET /api/dashboard/summary` - Get portfolio summary
+  - Returns: total portfolio value, available cash, unrealized PnL (USD and %), realized PnL
+  - Requires authentication
+
+- `GET /api/dashboard/holdings` - Get user holdings
+  - Returns: list of assets with quantity, average buy price, current price, market value, and PnL
+  - Requires authentication
+
+- `GET /api/dashboard/recent-transactions?limit=10` - Get recent transactions
+  - Returns: latest user transactions (orders)
+  - Requires authentication
+
+- `GET /api/prices/snapshot?symbols=BTC,ETH,SOL` - Get current prices
+  - Returns: current price snapshot for specified symbols
+  - Public endpoint (no authentication required)
+
+- `GET /api/prices/history?symbol=BTC&range=24h` - Get price history
+  - Returns: price history for a symbol over specified range (24h, 7d, 30d)
+  - Public endpoint (no authentication required)
+
+- `GET /api/system/health` - Get system health
+  - Returns: simplified health status for API, DB, Kafka
+  - Public endpoint (no authentication required)
+
+### Dashboard Calculations
+
+**Total Portfolio Value**: Sum of all asset market values (quantity × current price) + available cash (USDT)
+
+**Average Buy Price**: Weighted average cost basis calculated from all BUY trades, adjusted for SELL trades using FIFO/average cost method
+
+**Unrealized PnL**: Current market value - cost basis (average buy price × quantity)
+
+**Realized PnL**: Sum of (sell price - average cost at time of sale) × quantity for all completed SELL trades
+
+**Note**: Calculations use average cost method for simplicity. All prices are in USD (USDT is treated as 1:1 with USD).

@@ -18,4 +18,16 @@ export const ENDPOINTS = {
     list: '/api/transactions',
     byId: (id) => `/api/transactions/${id}`,
   },
+  dashboard: {
+    summary: '/api/dashboard/summary',
+    holdings: '/api/dashboard/holdings',
+    recentTransactions: '/api/dashboard/recent-transactions',
+  },
+  prices: {
+    snapshot: '/api/prices/snapshot',
+    history: '/api/prices/history',
+  },
+  system: {
+    health: '/api/system/health',
+  },
 };

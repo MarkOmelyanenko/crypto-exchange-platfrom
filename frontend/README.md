@@ -14,6 +14,11 @@ React frontend application for the crypto exchange simulator.
 npm install
 ```
 
+**Note**: The dashboard uses Recharts for price charts. If you haven't installed it yet:
+```bash
+npm install recharts
+```
+
 ### 2. Environment Configuration
 
 Create a `.env` file in the frontend directory with:
@@ -130,7 +135,20 @@ When authenticated, a user menu appears in the top-right corner showing:
 
 - React Router for navigation
 - JWT authentication with protected routes
+- **Dashboard** with portfolio summary, holdings table, price charts, and system status
 - Responsive layout with header and sidebar
 - Environment-based API configuration
 - Clean, simple styling with CSS
 - Form validation and error handling
+
+## Dashboard
+
+The dashboard (`/dashboard`) provides a comprehensive view of the user's portfolio:
+
+- **Portfolio Summary Cards**: Total value, available cash, unrealized PnL, realized PnL
+- **Holdings Table**: All assets with quantities, prices, market values, and PnL (sortable)
+- **Price Trends Chart**: 24-hour price history for top holdings (using Recharts)
+- **Recent Transactions**: Latest 10 transactions with link to full history
+- **System Status**: Health indicators for API, DB, and Kafka
+
+The dashboard automatically polls for price updates every 10 seconds and handles empty states gracefully.

@@ -35,24 +35,24 @@ function App() {
         )}
       </header>
       {!isAuthPage && (
-        <div className="app-body">
-          <aside className="app-sidebar">
-            <nav className="sidebar-nav">
-              <NavLink to="/dashboard" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
-                Dashboard
-              </NavLink>
-              <NavLink to="/assets" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
-                Assets
-              </NavLink>
-              <NavLink to="/transactions" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
-                Transactions
-              </NavLink>
-            </nav>
-          </aside>
-          <main className="app-main">
-            <Outlet />
-          </main>
-        </div>
+      <div className="app-body">
+        <aside className="app-sidebar">
+          <nav className="sidebar-nav">
+            <NavLink to="/dashboard" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+              Dashboard
+            </NavLink>
+            <NavLink to="/assets" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+              Assets
+            </NavLink>
+            <NavLink to="/transactions" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+              Transactions
+            </NavLink>
+          </nav>
+        </aside>
+        <main className="app-main">
+          <Outlet />
+        </main>
+      </div>
       )}
       {isAuthPage && (
         <main style={{ minHeight: 'calc(100vh - 80px)' }}>

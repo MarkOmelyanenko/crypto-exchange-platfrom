@@ -29,7 +29,7 @@ apiClient.interceptors.response.use(
       localStorage.removeItem('auth_token');
       // Only redirect if not already on login/register page
       if (!window.location.pathname.includes('/login') && !window.location.pathname.includes('/register')) {
-        window.location.assign('/login');
+      window.location.assign('/login');
       }
     }
     return Promise.reject(error);

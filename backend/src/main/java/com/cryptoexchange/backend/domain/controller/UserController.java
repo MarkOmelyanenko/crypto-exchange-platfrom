@@ -32,15 +32,15 @@ public class UserController {
         if (authentication == null || authentication.getPrincipal() == null) {
             return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).build();
         }
-
+        
         try {
             UUID userId = UUID.fromString(authentication.getPrincipal().toString());
             UserAccount user = userService.getUser(userId);
-            return ResponseEntity.ok(new UserMeResponse(
-                user.getId().toString(),
+        return ResponseEntity.ok(new UserMeResponse(
+            user.getId().toString(),
                 user.getLogin(),
                 user.getEmail()
-            ));
+        ));
         } catch (Exception e) {
             return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).build();
         }

@@ -98,14 +98,14 @@ function RegisterPage() {
           <label style={{ display: 'block', marginBottom: '5px' }}>
             Email:
           </label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            disabled={loading}
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              disabled={loading}
             style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
-          />
+            />
           {errors.email && <div style={{ color: 'red', fontSize: '12px', marginTop: '5px' }}>{errors.email}</div>}
         </div>
         
@@ -113,14 +113,14 @@ function RegisterPage() {
           <label style={{ display: 'block', marginBottom: '5px' }}>
             Password:
           </label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            disabled={loading}
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              disabled={loading}
             style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
-          />
+            />
           {errors.password && <div style={{ color: 'red', fontSize: '12px', marginTop: '5px' }}>{errors.password}</div>}
         </div>
         
