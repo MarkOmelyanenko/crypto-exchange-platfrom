@@ -10,6 +10,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -19,6 +20,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/wallet")
 @Tag(name = "Wallet", description = "Wallet and balance management endpoints")
+@Validated
 public class WalletController {
 
     private final WalletService walletService;

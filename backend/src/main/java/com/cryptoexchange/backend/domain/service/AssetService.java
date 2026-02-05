@@ -3,6 +3,8 @@ package com.cryptoexchange.backend.domain.service;
 import com.cryptoexchange.backend.domain.exception.NotFoundException;
 import com.cryptoexchange.backend.domain.model.Asset;
 import com.cryptoexchange.backend.domain.repository.AssetRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,9 +15,11 @@ import java.util.UUID;
 @Transactional
 public class AssetService {
 
+    private static final Logger log = LoggerFactory.getLogger(AssetService.class);
+
     private final AssetRepository assetRepository;
 
-    public AssetService(AssetRepository assetRepository) {
+    public AssetService(final AssetRepository assetRepository) {
         this.assetRepository = assetRepository;
     }
 
@@ -24,7 +28,9 @@ public class AssetService {
             throw new IllegalArgumentException("Asset with symbol " + symbol + " already exists");
         }
         Asset asset = new Asset(symbol, name, scale);
-        return assetRepository.save(asset);
+        Asset saved = assetRepository.save(asset);
+        log.info("Created asset: {} (name: {}, scale: {})", symbol, name, scale);
+        return saved;
     }
 
     @Transactional(readOnly = true)

@@ -9,7 +9,7 @@ public class WebConfig implements WebMvcConfigurer {
 
     private final RateLimitInterceptor rateLimitInterceptor;
 
-    public WebConfig(RateLimitInterceptor rateLimitInterceptor) {
+    public WebConfig(final RateLimitInterceptor rateLimitInterceptor) {
         this.rateLimitInterceptor = rateLimitInterceptor;
     }
 

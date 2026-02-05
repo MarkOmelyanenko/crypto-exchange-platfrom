@@ -3,6 +3,8 @@ package com.cryptoexchange.backend.domain.service;
 import com.cryptoexchange.backend.domain.exception.NotFoundException;
 import com.cryptoexchange.backend.domain.model.UserAccount;
 import com.cryptoexchange.backend.domain.repository.UserAccountRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,9 +14,11 @@ import java.util.UUID;
 @Transactional
 public class UserService {
 
+    private static final Logger log = LoggerFactory.getLogger(UserService.class);
+
     private final UserAccountRepository userAccountRepository;
 
-    public UserService(UserAccountRepository userAccountRepository) {
+    public UserService(final UserAccountRepository userAccountRepository) {
         this.userAccountRepository = userAccountRepository;
     }
 
@@ -23,7 +27,9 @@ public class UserService {
             throw new IllegalArgumentException("User with email " + email + " already exists");
         }
         UserAccount user = new UserAccount(email);
-        return userAccountRepository.save(user);
+        UserAccount saved = userAccountRepository.save(user);
+        log.info("Created user: {} (id: {})", email, saved.getId());
+        return saved;
     }
 
     @Transactional(readOnly = true)

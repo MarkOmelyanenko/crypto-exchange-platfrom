@@ -13,6 +13,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.OffsetDateTime;
@@ -25,6 +26,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/markets")
 @Tag(name = "Markets", description = "Public market data endpoints")
+@Validated
 public class MarketController {
 
     private final MarketService marketService;
@@ -77,7 +79,7 @@ public class MarketController {
     @Operation(summary = "Get recent trades", description = "Returns recent trades for a market")
     public ResponseEntity<List<TradeResponse>> getTrades(
             @PathVariable String symbol,
-            @RequestParam(defaultValue = "50") int limit) {
+            @RequestParam(defaultValue = "50") @jakarta.validation.constraints.Min(value = 1, message = "Limit must be at least 1") @jakarta.validation.constraints.Max(value = 1000, message = "Limit must be at most 1000") int limit) {
         
         // Try snapshot store first
         List<MarketSnapshotStore.TradeSnapshot> snapshots = snapshotStore.getRecentTrades(symbol, limit);
@@ -103,8 +105,8 @@ public class MarketController {
             @PathVariable String symbol,
             @RequestParam(required = false) OffsetDateTime from,
             @RequestParam(required = false) OffsetDateTime to,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "100") int size) {
+            @RequestParam(defaultValue = "0") @jakarta.validation.constraints.Min(value = 0, message = "Page must be non-negative") int page,
+            @RequestParam(defaultValue = "100") @jakarta.validation.constraints.Min(value = 1, message = "Size must be at least 1") @jakarta.validation.constraints.Max(value = 1000, message = "Size must be at most 1000") int size) {
         
         Pageable pageable = PageRequest.of(page, size);
         

@@ -4,9 +4,11 @@ import com.cryptoexchange.backend.domain.model.Trade;
 import com.cryptoexchange.backend.domain.repository.TradeRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -14,6 +16,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/trades")
 @Tag(name = "Trades", description = "Trade history endpoints")
+@Validated
 public class TradeController {
 
     private final TradeRepository tradeRepository;
@@ -25,13 +28,8 @@ public class TradeController {
     @GetMapping
     @Operation(summary = "List trades", description = "Returns paginated list of trades for a market")
     public ResponseEntity<Page<TradeResponse>> listTrades(
-            @RequestParam(required = false) UUID marketId,
+            @RequestParam @NotNull(message = "Market ID is required") UUID marketId,
             Pageable pageable) {
-        
-        if (marketId == null) {
-            return ResponseEntity.badRequest().build();
-        }
-        
         Page<Trade> trades = tradeRepository.findAllByMarketId(marketId, pageable);
         Page<TradeResponse> response = trades.map(TradeResponse::from);
         return ResponseEntity.ok(response);

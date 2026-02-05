@@ -12,7 +12,6 @@ import com.cryptoexchange.backend.domain.repository.WalletHoldRepository;
 import com.cryptoexchange.backend.domain.util.MoneyUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;

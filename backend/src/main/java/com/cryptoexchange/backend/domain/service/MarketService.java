@@ -4,6 +4,8 @@ import com.cryptoexchange.backend.domain.exception.NotFoundException;
 import com.cryptoexchange.backend.domain.model.Asset;
 import com.cryptoexchange.backend.domain.model.Market;
 import com.cryptoexchange.backend.domain.repository.MarketRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,10 +17,12 @@ import java.util.UUID;
 @Transactional
 public class MarketService {
 
+    private static final Logger log = LoggerFactory.getLogger(MarketService.class);
+
     private final MarketRepository marketRepository;
     private final AssetService assetService;
 
-    public MarketService(MarketRepository marketRepository, AssetService assetService) {
+    public MarketService(final MarketRepository marketRepository, final AssetService assetService) {
         this.marketRepository = marketRepository;
         this.assetService = assetService;
     }
@@ -35,7 +39,9 @@ public class MarketService {
         Asset quoteAsset = assetService.getAsset(quoteAssetId);
         
         Market market = new Market(baseAsset, quoteAsset, symbol);
-        return marketRepository.save(market);
+        Market saved = marketRepository.save(market);
+        log.info("Created market: {} (base: {}, quote: {})", symbol, baseAsset.getSymbol(), quoteAsset.getSymbol());
+        return saved;
     }
 
     @Transactional(readOnly = true)

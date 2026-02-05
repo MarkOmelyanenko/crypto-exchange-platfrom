@@ -16,7 +16,6 @@ import jakarta.annotation.PostConstruct;
 import java.math.BigDecimal;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.List;
 
 /**
  * Market simulator service that generates realistic market data.

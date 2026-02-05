@@ -8,12 +8,14 @@ import com.cryptoexchange.backend.domain.service.OrderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -22,6 +24,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/orders")
 @Tag(name = "Orders", description = "Order management endpoints")
+@Validated
 public class OrderController {
 
     private final OrderService orderService;
@@ -86,6 +89,17 @@ public class OrderController {
         @NotNull(message = "Quantity is required")
         @DecimalMin(value = "0.00000001", message = "Quantity must be positive")
         public BigDecimal quantity;
+
+        @AssertTrue(message = "Price is required for LIMIT orders")
+        public boolean isPriceValidForOrderType() {
+            if (type == null) {
+                return true; // Type validation will catch this
+            }
+            if (type == OrderType.LIMIT) {
+                return price != null && price.compareTo(BigDecimal.ZERO) > 0;
+            }
+            return true; // MARKET orders don't require price
+        }
     }
 
     public static class OrderResponse {
