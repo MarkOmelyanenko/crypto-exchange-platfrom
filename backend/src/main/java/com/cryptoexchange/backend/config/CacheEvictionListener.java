@@ -4,9 +4,8 @@ import com.cryptoexchange.backend.domain.event.DomainBalanceChanged;
 import com.cryptoexchange.backend.domain.event.DomainTradeExecuted;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.cache.CacheManager;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -14,8 +13,10 @@ import org.springframework.transaction.event.TransactionalEventListener;
 /**
  * Listens to domain events and evicts relevant caches after transaction commit.
  * This ensures cache consistency with database state.
+ * Only enabled when a CacheManager bean is available (e.g., when Redis is configured).
  */
 @Component
+@ConditionalOnBean(CacheManager.class)
 public class CacheEvictionListener {
 
     private static final Logger log = LoggerFactory.getLogger(CacheEvictionListener.class);

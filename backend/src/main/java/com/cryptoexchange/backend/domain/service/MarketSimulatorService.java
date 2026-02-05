@@ -4,8 +4,6 @@ import com.cryptoexchange.backend.domain.model.Market;
 import com.cryptoexchange.backend.domain.model.MarketTick;
 import com.cryptoexchange.backend.domain.model.MarketTrade;
 import com.cryptoexchange.backend.domain.repository.MarketRepository;
-import com.cryptoexchange.backend.domain.repository.MarketTickRepository;
-import com.cryptoexchange.backend.domain.repository.MarketTradeRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,6 +16,7 @@ import jakarta.annotation.PostConstruct;
 import java.math.BigDecimal;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.List;
 
 /**
  * Market simulator service that generates realistic market data.
@@ -30,11 +29,11 @@ public class MarketSimulatorService {
     private static final Logger log = LoggerFactory.getLogger(MarketSimulatorService.class);
 
     private final MarketRepository marketRepository;
-    private final MarketTickRepository marketTickRepository;
-    private final MarketTradeRepository marketTradeRepository;
+    private final MarketTickStore tickStore;
+    private final MarketTradeStore tradeStore;
     private final MarketSimulationEngine simulationEngine;
-    private final MarketSimulatorRedisService redisService;
-    private final MarketSimulatorKafkaPublisher kafkaPublisher;
+    private final MarketSnapshotStore snapshotStore;
+    private final MarketEventPublisher eventPublisher;
 
     @Value("${app.simulator.seed:42}")
     private long seed;
@@ -67,17 +66,17 @@ public class MarketSimulatorService {
 
     public MarketSimulatorService(
             MarketRepository marketRepository,
-            MarketTickRepository marketTickRepository,
-            MarketTradeRepository marketTradeRepository,
+            MarketTickStore tickStore,
+            MarketTradeStore tradeStore,
             MarketSimulationEngine simulationEngine,
-            MarketSimulatorRedisService redisService,
-            MarketSimulatorKafkaPublisher kafkaPublisher) {
+            MarketSnapshotStore snapshotStore,
+            MarketEventPublisher eventPublisher) {
         this.marketRepository = marketRepository;
-        this.marketTickRepository = marketTickRepository;
-        this.marketTradeRepository = marketTradeRepository;
+        this.tickStore = tickStore;
+        this.tradeStore = tradeStore;
         this.simulationEngine = simulationEngine;
-        this.redisService = redisService;
-        this.kafkaPublisher = kafkaPublisher;
+        this.snapshotStore = snapshotStore;
+        this.eventPublisher = eventPublisher;
     }
 
     @PostConstruct
@@ -150,6 +149,15 @@ public class MarketSimulatorService {
         }
     }
 
+    /**
+     * Execute one tick for a single market (for testing).
+     * This method performs one cycle without scheduling.
+     */
+    @Transactional
+    public void runOneTick(String marketSymbol) {
+        processMarketTick(marketSymbol);
+    }
+
     @Transactional
     public void processMarketTick(String marketSymbol) {
         Optional<Market> marketOpt = marketRepository.findBySymbol(marketSymbol);
@@ -175,25 +183,25 @@ public class MarketSimulatorService {
             MarketTick tick = new MarketTick(
                 marketSymbol, tickData.ts, tickData.lastPrice, tickData.bid, tickData.ask, tickData.volume
             );
-            marketTickRepository.save(tick);
+            tickStore.saveAll(List.of(tick));
         }
 
-        // Always persist trades (but limit to recent N)
-        for (MarketSimulationEngine.TradeData tradeData : tradeDataList) {
-            MarketTrade trade = new MarketTrade(
+        // Always persist trades
+        List<MarketTrade> trades = tradeDataList.stream()
+            .map(tradeData -> new MarketTrade(
                 marketSymbol, tradeData.ts, tradeData.price, tradeData.qty, tradeData.side
-            );
-            marketTradeRepository.save(trade);
-        }
+            ))
+            .toList();
+        tradeStore.saveAll(trades);
 
-        // Update Redis snapshots
-        redisService.updateTicker(marketSymbol, tickData);
-        redisService.updateRecentTrades(marketSymbol, tradeDataList);
+        // Update snapshots
+        snapshotStore.saveTicker(marketSymbol, tickData);
+        snapshotStore.saveRecentTrades(marketSymbol, tradeDataList);
 
-        // Publish to Kafka
-        kafkaPublisher.publishTick(marketSymbol, tickData);
+        // Publish events
+        eventPublisher.publishTick(marketSymbol, tickData);
         for (MarketSimulationEngine.TradeData tradeData : tradeDataList) {
-            kafkaPublisher.publishTrade(marketSymbol, tradeData);
+            eventPublisher.publishTrade(marketSymbol, tradeData);
         }
 
         log.debug("Processed tick for {}: price={}, trades={}", marketSymbol, tickData.lastPrice, tradeDataList.size());

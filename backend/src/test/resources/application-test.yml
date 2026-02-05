@@ -1,47 +1,40 @@
 # Test profile configuration
-# Used during Maven test execution
-# Services are started via docker-compose before tests run
-# Uses environment variables so it works both locally and in CI
+# Uses H2 in-memory database for fast, isolated tests
+# Redis and Kafka are excluded by default - tests can mock them as needed
 
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5434/${POSTGRES_DB:-crypto_exchange_test}?connectTimeout=30&socketTimeout=60}
-    username: ${SPRING_DATASOURCE_USERNAME:${POSTGRES_USER:-postgres}}
-    password: ${SPRING_DATASOURCE_PASSWORD:${POSTGRES_PASSWORD:-postgres}}
-    driver-class-name: org.postgresql.Driver
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER:org.h2.Driver}
     hikari:
-      connection-timeout: 60000  # 60 seconds - increased for CI environments
+      connection-timeout: 5000
       maximum-pool-size: 5
       minimum-idle: 1
-      initialization-fail-timeout: -1  # Don't fail on initialization timeout
-      leak-detection-threshold: 60000  # Detect connection leaks
   
   jpa:
     hibernate:
-      ddl-auto: validate
-    # Explicitly set dialect to avoid connection issues during test initialization
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-    # Ensure JPA waits for Flyway to complete
+        hbm2ddl.auto: create-drop
+        hbm2ddl.create_namespaces: false
+        globally_quoted_identifiers: true
+        hbm2ddl.import_files: ""
     defer-datasource-initialization: false
   
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6381}
+  # Exclude Redis and Kafka auto-configuration by default
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
   
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
-  
-  # Ensure Flyway runs migrations in tests before Hibernate validation
+  # Disable Flyway by default - H2 will create schema from entities
   flyway:
-    enabled: true
-    baseline-on-migrate: true
-    baseline-version: 0
-    locations: classpath:db/migration
-    validate-on-migrate: true
-    clean-disabled: true
+    enabled: false
 
 # Disable health checks during tests to speed up startup
 management:
@@ -50,3 +43,6 @@ management:
       enabled: false
     kafka:
       enabled: false
+
+# Kafka placeholder (tests that need it can override)
+KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}

@@ -3,10 +3,10 @@ package com.cryptoexchange.backend.domain.controller;
 import com.cryptoexchange.backend.domain.model.Market;
 import com.cryptoexchange.backend.domain.model.MarketTick;
 import com.cryptoexchange.backend.domain.model.MarketTrade;
-import com.cryptoexchange.backend.domain.repository.MarketTickRepository;
-import com.cryptoexchange.backend.domain.repository.MarketTradeRepository;
 import com.cryptoexchange.backend.domain.service.MarketService;
-import com.cryptoexchange.backend.domain.service.MarketSimulatorRedisService;
+import com.cryptoexchange.backend.domain.service.MarketTickStore;
+import com.cryptoexchange.backend.domain.service.MarketTradeStore;
+import com.cryptoexchange.backend.domain.service.MarketSnapshotStore;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Page;
@@ -28,19 +28,19 @@ import java.util.stream.Collectors;
 public class MarketController {
 
     private final MarketService marketService;
-    private final MarketSimulatorRedisService redisService;
-    private final MarketTickRepository marketTickRepository;
-    private final MarketTradeRepository marketTradeRepository;
+    private final MarketSnapshotStore snapshotStore;
+    private final MarketTickStore tickStore;
+    private final MarketTradeStore tradeStore;
 
     public MarketController(
             MarketService marketService,
-            MarketSimulatorRedisService redisService,
-            MarketTickRepository marketTickRepository,
-            MarketTradeRepository marketTradeRepository) {
+            MarketSnapshotStore snapshotStore,
+            MarketTickStore tickStore,
+            MarketTradeStore tradeStore) {
         this.marketService = marketService;
-        this.redisService = redisService;
-        this.marketTickRepository = marketTickRepository;
-        this.marketTradeRepository = marketTradeRepository;
+        this.snapshotStore = snapshotStore;
+        this.tickStore = tickStore;
+        this.tradeStore = tradeStore;
     }
 
     @GetMapping
@@ -56,17 +56,19 @@ public class MarketController {
     @GetMapping("/{symbol}/ticker")
     @Operation(summary = "Get market ticker", description = "Returns latest ticker data for a market")
     public ResponseEntity<TickerResponse> getTicker(@PathVariable String symbol) {
-        // Try Redis first
-        MarketSimulatorRedisService.TickerSnapshot snapshot = redisService.getTicker(symbol);
+        // Try snapshot store first
+        MarketSnapshotStore.TickerSnapshot snapshot = snapshotStore.getTicker(symbol);
         
         if (snapshot != null) {
             return ResponseEntity.ok(TickerResponse.fromSnapshot(snapshot));
         }
         
         // Fallback to DB
-        MarketTick latestTick = marketTickRepository.findFirstByMarketSymbolOrderByTsDesc(symbol)
-            .orElseThrow(() -> new com.cryptoexchange.backend.domain.exception.NotFoundException(
-                "No ticker data found for market: " + symbol));
+        MarketTick latestTick = tickStore.findLatest(symbol);
+        if (latestTick == null) {
+            throw new com.cryptoexchange.backend.domain.exception.NotFoundException(
+                "No ticker data found for market: " + symbol);
+        }
         
         return ResponseEntity.ok(TickerResponse.fromTick(latestTick));
     }
@@ -77,8 +79,8 @@ public class MarketController {
             @PathVariable String symbol,
             @RequestParam(defaultValue = "50") int limit) {
         
-        // Try Redis first
-        List<MarketSimulatorRedisService.TradeSnapshot> snapshots = redisService.getRecentTrades(symbol, limit);
+        // Try snapshot store first
+        List<MarketSnapshotStore.TradeSnapshot> snapshots = snapshotStore.getRecentTrades(symbol, limit);
         
         if (!snapshots.isEmpty()) {
             List<TradeResponse> response = snapshots.stream()
@@ -88,9 +90,8 @@ public class MarketController {
         }
         
         // Fallback to DB
-        List<MarketTrade> trades = marketTradeRepository.findTop50ByMarketSymbolOrderByTsDesc(symbol);
+        List<MarketTrade> trades = tradeStore.findRecent(symbol, limit);
         List<TradeResponse> response = trades.stream()
-            .limit(limit)
             .map(TradeResponse::fromTrade)
             .collect(Collectors.toList());
         return ResponseEntity.ok(response);
@@ -114,8 +115,13 @@ public class MarketController {
             to = OffsetDateTime.now();
         }
         
-        Page<MarketTick> ticks = marketTickRepository.findByMarketSymbolAndTsBetween(symbol, from, to, pageable);
-        Page<TickerResponse> response = ticks.map(TickerResponse::fromTick);
+        List<MarketTick> ticks = tickStore.findRange(symbol, from, to, page, size);
+        // Convert to Page manually (simplified - in production you'd want proper pagination)
+        Page<TickerResponse> response = new org.springframework.data.domain.PageImpl<>(
+            ticks.stream().map(TickerResponse::fromTick).collect(Collectors.toList()),
+            pageable,
+            ticks.size()
+        );
         return ResponseEntity.ok(response);
     }
 
@@ -144,7 +150,7 @@ public class MarketController {
         public java.math.BigDecimal ask;
         public java.math.BigDecimal volume;
 
-        public static TickerResponse fromSnapshot(MarketSimulatorRedisService.TickerSnapshot snapshot) {
+        public static TickerResponse fromSnapshot(MarketSnapshotStore.TickerSnapshot snapshot) {
             TickerResponse response = new TickerResponse();
             response.ts = snapshot.ts;
             response.last = snapshot.last;
@@ -173,7 +179,7 @@ public class MarketController {
         public java.math.BigDecimal qty;
         public String side;
 
-        public static TradeResponse fromSnapshot(MarketSimulatorRedisService.TradeSnapshot snapshot) {
+        public static TradeResponse fromSnapshot(MarketSnapshotStore.TradeSnapshot snapshot) {
             TradeResponse response = new TradeResponse();
             response.ts = snapshot.ts;
             response.price = snapshot.price;

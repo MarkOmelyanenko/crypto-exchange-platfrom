@@ -24,6 +24,7 @@ import java.util.Map;
 
 @Configuration
 @EnableCaching
+@org.springframework.boot.autoconfigure.condition.ConditionalOnBean(RedisConnectionFactory.class)
 public class RedisConfig {
 
     @Value("${app.redis.cache.ttl.default:30s}")
@@ -72,14 +73,6 @@ public class RedisConfig {
     @Bean
     public StringRedisTemplate stringRedisTemplate(RedisConnectionFactory connectionFactory) {
         return new StringRedisTemplate(connectionFactory);
-    }
-
-    @Bean
-    public ObjectMapper objectMapper() {
-        ObjectMapper objectMapper = new ObjectMapper();
-        objectMapper.registerModule(new JavaTimeModule());
-        // Don't enable default typing for general use (only for Redis cache serialization)
-        return objectMapper;
     }
 
     @Bean

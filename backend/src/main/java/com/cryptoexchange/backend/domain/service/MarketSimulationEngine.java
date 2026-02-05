@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -22,6 +23,8 @@ public class MarketSimulationEngine {
     private static final Logger log = LoggerFactory.getLogger(MarketSimulationEngine.class);
     private static final MathContext MC = new MathContext(18, RoundingMode.HALF_UP);
 
+    private final Clock clock;
+
     // Per-market state
     private static class MarketState {
         BigDecimal lastPrice;
@@ -29,21 +32,29 @@ public class MarketSimulationEngine {
         OffsetDateTime lastTs;
         Random rng;
 
-        MarketState(BigDecimal initialPrice, long seed) {
+        MarketState(BigDecimal initialPrice, long seed, Clock clock) {
             this.lastPrice = initialPrice;
             this.rollingVolume24h = BigDecimal.ZERO;
-            this.lastTs = OffsetDateTime.now();
+            this.lastTs = OffsetDateTime.now(clock);
             this.rng = new Random(seed);
         }
     }
 
     private final Map<String, MarketState> marketStates = new ConcurrentHashMap<>();
 
+    public MarketSimulationEngine() {
+        this(Clock.systemUTC());
+    }
+
+    public MarketSimulationEngine(Clock clock) {
+        this.clock = clock;
+    }
+
     /**
      * Initialize or reset market state.
      */
     public void initializeMarket(String marketSymbol, BigDecimal initialPrice, long seed) {
-        marketStates.put(marketSymbol, new MarketState(initialPrice, seed));
+        marketStates.put(marketSymbol, new MarketState(initialPrice, seed, clock));
         log.debug("Initialized market {} with price {} and seed {}", marketSymbol, initialPrice, seed);
     }
 
@@ -85,7 +96,7 @@ public class MarketSimulationEngine {
 
         // Update state
         state.lastPrice = newPrice;
-        state.lastTs = OffsetDateTime.now();
+        state.lastTs = OffsetDateTime.now(clock);
 
         return new TickData(newPrice, bid, ask, state.rollingVolume24h, state.lastTs);
     }
@@ -105,7 +116,7 @@ public class MarketSimulationEngine {
         numTrades = Math.min(numTrades, avgTradesPerTick * 3); // Cap at 3x average
 
         List<TradeData> trades = new ArrayList<>();
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime now = OffsetDateTime.now(clock);
 
         for (int i = 0; i < numTrades; i++) {
             // Random side
