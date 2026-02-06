@@ -7,12 +7,11 @@ import { list, getById } from '../shared/api/services/transactionsService';
 const fmtUsd = (v, decimals = 2) => {
   if (v == null || isNaN(Number(v))) return '—';
   return new Intl.NumberFormat('en-US', {
-    style: 'currency', currency: 'USD',
     minimumFractionDigits: decimals, maximumFractionDigits: decimals,
-  }).format(Number(v));
+  }).format(Number(v)) + ' USDT';
 };
 
-/** Format a value with its quote currency: "$1,234.56" for USDT, "0.02947 BTC" otherwise */
+/** Format a value with its quote currency: "1,234.56 USDT" for USDT, "0.02947 BTC" otherwise */
 const fmtQuote = (v, quoteAsset) => {
   if (v == null || isNaN(Number(v))) return '—';
   if (!quoteAsset || quoteAsset === 'USDT' || quoteAsset === 'USDC') {

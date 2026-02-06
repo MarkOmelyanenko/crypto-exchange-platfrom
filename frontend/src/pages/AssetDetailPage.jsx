@@ -13,9 +13,8 @@ import {
 const fmt = (v, decimals = 2) => {
   if (v == null || isNaN(Number(v))) return '—';
   return new Intl.NumberFormat('en-US', {
-    style: 'currency', currency: 'USD',
     minimumFractionDigits: decimals, maximumFractionDigits: decimals,
-  }).format(Number(v));
+  }).format(Number(v)) + ' USDT';
 };
 
 const fmtPct = (v) => {
@@ -436,7 +435,7 @@ function PriceChart({ data, range }) {
           <YAxis
             domain={[minP - pad, maxP + pad]}
             tick={{ fontSize: 11, fill: '#9ca3af' }}
-            tickFormatter={(v) => `$${v.toLocaleString()}`}
+            tickFormatter={(v) => `${v.toLocaleString()} USDT`}
             width={80}
           />
           <Tooltip

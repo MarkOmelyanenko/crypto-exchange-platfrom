@@ -132,7 +132,7 @@ public class TransactionService {
 
         if (cashBalance.getAvailable().compareTo(totalUsd) < 0) {
             throw new InsufficientBalanceException(
-                    String.format("Insufficient cash. Available: $%s, Required: $%s",
+                    String.format("Insufficient cash. Available: %s USDT, Required: %s USDT",
                             cashBalance.getAvailable().setScale(2, RoundingMode.HALF_UP),
                             totalUsd.setScale(2, RoundingMode.HALF_UP)));
         }

@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { getSummary, getHoldings, getRecentTransactions } from '../shared/api/services/dashboardService';
-import { getHistory } from '../shared/api/services/priceService';
+import { getHistory, getSnapshot } from '../shared/api/services/priceService';
 import { getHealth } from '../shared/api/services/systemService';
+import { getWalletBalances, getCashBalance } from '../shared/api/services/walletService';
 import { usePriceStream } from '../shared/hooks/usePriceStream';
+import { PortfolioPieChart } from '../shared/components/PortfolioPieChart';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
@@ -13,9 +15,8 @@ import {
 const fmt = (v, decimals = 2) => {
   if (v == null || isNaN(Number(v))) return '—';
   return new Intl.NumberFormat('en-US', {
-    style: 'currency', currency: 'USD',
     minimumFractionDigits: decimals, maximumFractionDigits: decimals,
-  }).format(Number(v));
+  }).format(Number(v)) + ' USDT';
 };
 
 const fmtPct = (v) => {
@@ -49,11 +50,16 @@ function DashboardPage() {
   const [transactions, setTransactions] = useState([]);
   const [priceHistory, setPriceHistory] = useState([]);
   const [systemHealth, setSystemHealth] = useState(null);
+  const [balances, setBalances] = useState([]);
+  const [cashBalance, setCashBalance] = useState(null);
+  const [portfolioPrices, setPortfolioPrices] = useState({});
+  const [portfolioLastUpdated, setPortfolioLastUpdated] = useState(null);
   const [loading, setLoading] = useState({
-    summary: true, holdings: true, transactions: true, chart: true, health: true,
+    summary: true, holdings: true, transactions: true, chart: true, health: true, portfolio: true,
   });
   const [errors, setErrors] = useState({});
   const holdingsRef = useRef([]);
+  const priceCacheRef = useRef({ timestamp: 0, data: {} });
 
   // Live price stream for holdings symbols
   const holdingSymbols = useMemo(
@@ -62,8 +68,88 @@ function DashboardPage() {
   );
   const { prices: livePrices, connected: liveConnected, error: liveError } = usePriceStream(holdingSymbols);
 
+  // Load prices for portfolio chart (with caching)
+  const loadPortfolioPrices = useCallback(async (balancesData) => {
+    try {
+      // Check cache (5 seconds)
+      const now = Date.now();
+      if (priceCacheRef.current.timestamp > 0 && (now - priceCacheRef.current.timestamp) < 5000) {
+        setPortfolioPrices(priceCacheRef.current.data);
+        setLoading(prev => ({ ...prev, portfolio: false }));
+        return;
+      }
+
+      // Get unique asset symbols (excluding USDT)
+      const symbols = [...new Set(
+        balancesData
+          .filter(b => b.asset !== 'USDT' && Number(b.available) > 0)
+          .map(b => b.asset)
+      )];
+
+      if (symbols.length === 0) {
+        setPortfolioPrices({});
+        setLoading(prev => ({ ...prev, portfolio: false }));
+        return;
+      }
+
+      const priceSnapshots = await getSnapshot(symbols);
+      const priceMap = {};
+      
+      for (const snapshot of priceSnapshots || []) {
+        if (snapshot && snapshot.symbol) {
+          // Handle both null and valid price values
+          const price = snapshot.priceUsd;
+          if (price != null && !isNaN(Number(price)) && Number(price) > 0) {
+            priceMap[snapshot.symbol] = Number(price);
+          }
+          // If price is null/undefined, it will be skipped (handled in portfolioUtils)
+        }
+      }
+
+      // Update cache
+      priceCacheRef.current = {
+        timestamp: now,
+        data: priceMap,
+      };
+
+      setPortfolioPrices(priceMap);
+    } catch (err) {
+      console.error('Failed to load portfolio prices:', err);
+      setErrors(prev => ({ ...prev, portfolio: 'Failed to load prices' }));
+    } finally {
+      setLoading(prev => ({ ...prev, portfolio: false }));
+    }
+  }, []);
+
+  const loadPriceData = useCallback(async (holdingsData) => {
+    setLoading(prev => ({ ...prev, chart: true }));
+    try {
+      const symbols = holdingsData && holdingsData.length > 0
+        ? [...holdingsData]
+            .sort((a, b) => Number(b.marketValueUsd) - Number(a.marketValueUsd))
+            .slice(0, 5)
+            .map(h => h.symbol)
+        : ['BTC', 'ETH', 'SOL'];
+
+      const chartSymbols = symbols.slice(0, 3);
+      const histories = await Promise.all(
+        chartSymbols.map(sym =>
+          getHistory(sym, '24h')
+            .then(data => ({ symbol: sym, data: data || [] }))
+            .catch(() => ({ symbol: sym, data: [] }))
+        )
+      );
+
+      setPriceHistory(histories.filter(h => h.data.length > 0));
+    } catch {
+      // Silently fail; chart will show "no data"
+    } finally {
+      setLoading(prev => ({ ...prev, chart: false }));
+    }
+  }, []);
+
   const loadDashboardData = useCallback(async () => {
-    setLoading({ summary: true, holdings: true, transactions: true, chart: true, health: true });
+    setLoading({ summary: true, holdings: true, transactions: true, chart: true, health: true, portfolio: true });
     setErrors({});
 
     const results = await Promise.allSettled([
@@ -71,9 +157,11 @@ function DashboardPage() {
       getHoldings(),
       getRecentTransactions(10),
       getHealth(),
+      getWalletBalances(),
+      getCashBalance(),
     ]);
 
-    const [summaryR, holdingsR, txR, healthR] = results;
+    const [summaryR, holdingsR, txR, healthR, balancesR, cashR] = results;
 
     if (summaryR.status === 'fulfilled') {
       setSummary(summaryR.value);
@@ -104,37 +192,30 @@ function DashboardPage() {
     }
     setLoading(prev => ({ ...prev, health: false }));
 
+    if (balancesR.status === 'fulfilled') {
+      setBalances(balancesR.value || []);
+    } else {
+      setErrors(prev => ({ ...prev, portfolio: balancesR.reason }));
+    }
+
+    if (cashR.status === 'fulfilled') {
+      setCashBalance(cashR.value?.cashUsd || null);
+    } else {
+      setErrors(prev => ({ ...prev, portfolio: cashR.reason }));
+    }
+
+    // Load portfolio prices
+    await loadPortfolioPrices(balancesR.status === 'fulfilled' ? balancesR.value || [] : []);
+    
+    // Update last updated timestamp when portfolio data is refreshed
+    if (balancesR.status === 'fulfilled' || cashR.status === 'fulfilled') {
+      setPortfolioLastUpdated(new Date());
+    }
+
     // Load price charts
     const h = holdingsR.status === 'fulfilled' ? holdingsR.value : [];
     await loadPriceData(h);
-  }, []);
-
-  const loadPriceData = useCallback(async (holdingsData) => {
-    setLoading(prev => ({ ...prev, chart: true }));
-    try {
-      const symbols = holdingsData && holdingsData.length > 0
-        ? [...holdingsData]
-            .sort((a, b) => Number(b.marketValueUsd) - Number(a.marketValueUsd))
-            .slice(0, 5)
-            .map(h => h.symbol)
-        : ['BTC', 'ETH', 'SOL'];
-
-      const chartSymbols = symbols.slice(0, 3);
-      const histories = await Promise.all(
-        chartSymbols.map(sym =>
-          getHistory(sym, '24h')
-            .then(data => ({ symbol: sym, data: data || [] }))
-            .catch(() => ({ symbol: sym, data: [] }))
-        )
-      );
-
-      setPriceHistory(histories.filter(h => h.data.length > 0));
-    } catch {
-      // Silently fail; chart will show "no data"
-    } finally {
-      setLoading(prev => ({ ...prev, chart: false }));
-    }
-  }, []);
+  }, [loadPortfolioPrices, loadPriceData]);
 
   // Polling: refresh prices every 10s
   useEffect(() => {
@@ -152,27 +233,49 @@ function DashboardPage() {
         <LiveIndicator connected={liveConnected} error={liveError} />
       </div>
 
-      {/* ─── Summary Cards ─── */}
-      {errors.summary ? (
-        <ErrorBox message="Failed to load portfolio summary" onRetry={loadDashboardData} />
-      ) : (
-        <div style={styles.cardGrid}>
-          <SummaryCard label="Total Portfolio Value" value={fmt(summary?.totalValueUsd)} loading={loading.summary} />
-          <SummaryCard label="Available Cash (USD)" value={fmt(summary?.availableCashUsd)} loading={loading.summary} />
-          <SummaryCard
-            label="Unrealized PnL"
-            value={summary ? `${fmt(summary.unrealizedPnlUsd)}  ${fmtPct(summary.unrealizedPnlPercent)}` : null}
-            valueColor={summary ? pnlColor(summary.unrealizedPnlUsd) : undefined}
-            loading={loading.summary}
-          />
-          <SummaryCard
-            label="Realized PnL"
-            value={summary ? fmt(summary.realizedPnlUsd) : null}
-            valueColor={summary ? pnlColor(summary.realizedPnlUsd) : undefined}
-            loading={loading.summary}
-          />
-        </div>
-      )}
+      {/* ─── Portfolio Allocation Chart ─── */}
+      <Section title="Portfolio Allocation">
+        {(errors.summary || errors.portfolio) ? (
+          <ErrorBox message="Failed to load portfolio data" onRetry={loadDashboardData} />
+        ) : (
+          <div style={styles.portfolioGrid}>
+            {/* Left side: Summary Cards */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <SummaryCard label="Total Portfolio Value" value={fmt(summary?.totalValueUsd)} loading={loading.summary} />
+              <SummaryCard label="USDT Balance" value={fmt(summary?.availableCashUsd)} loading={loading.summary} />
+              <SummaryCard
+                label="Unrealized PnL"
+                value={summary ? `${fmt(summary.unrealizedPnlUsd)}  ${fmtPct(summary.unrealizedPnlPercent)}` : null}
+                valueColor={summary ? pnlColor(summary.unrealizedPnlUsd) : undefined}
+                loading={loading.summary}
+              />
+              <SummaryCard
+                label="Realized PnL"
+                value={summary ? fmt(summary.realizedPnlUsd) : null}
+                valueColor={summary ? pnlColor(summary.realizedPnlUsd) : undefined}
+                loading={loading.summary}
+              />
+            </div>
+
+            {/* Right side: Chart with Legend */}
+            <div style={styles.card}>
+              <PortfolioPieChart
+                balances={balances}
+                cashUsd={cashBalance}
+                prices={portfolioPrices}
+                assetNames={holdings.reduce((acc, h) => {
+                  acc[h.symbol] = h.name;
+                  return acc;
+                }, { USDT: 'Tether' })}
+                lastUpdatedAt={portfolioLastUpdated}
+                loading={loading.portfolio}
+                error={errors.portfolio}
+                showLegendAsList={false}
+              />
+            </div>
+          </div>
+        )}
+      </Section>
 
       {/* ─── Holdings Table ─── */}
       <Section title="Holdings">
@@ -456,7 +559,7 @@ function PriceCharts({ data }) {
                 <YAxis
                   domain={[minP - pad, maxP + pad]}
                   tick={{ fontSize: 10, fill: '#9ca3af' }}
-                  tickFormatter={(v) => `$${v.toLocaleString()}`}
+                  tickFormatter={(v) => `${v.toLocaleString()} USDT`}
                   width={70}
                 />
                 <Tooltip
@@ -580,6 +683,12 @@ const styles = {
     gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
     gap: 16,
     marginBottom: 28,
+  },
+  portfolioGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 2fr',
+    gap: 24,
+    alignItems: 'start',
   },
   splitGrid: {
     display: 'grid',

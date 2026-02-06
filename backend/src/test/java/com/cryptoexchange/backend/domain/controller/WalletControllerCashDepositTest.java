@@ -116,8 +116,8 @@ class WalletControllerCashDepositTest {
         // Given
         when(cashDepositService.deposit(eq(USER_ID), any(BigDecimal.class)))
                 .thenThrow(new CashDepositService.DepositLimitExceededException(
-                        "Deposit of $500.00 would exceed the 24-hour limit of $1000.00. " +
-                                "You have deposited $800.00 in the last 24 hours. Remaining limit: $200.00.",
+                        "Deposit of 500.00 USDT would exceed the 24-hour limit of 1000.00 USDT. " +
+                                "You have deposited 800.00 USDT in the last 24 hours. Remaining limit: 200.00 USDT.",
                         new BigDecimal("200.00")
                 ));
 

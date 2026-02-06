@@ -11,11 +11,10 @@ const fmt = (v, decimals = 2) => {
 };
 
 const fmtUsd = (v) => {
-  if (v == null || isNaN(Number(v))) return '$0.00';
+  if (v == null || isNaN(Number(v))) return '0.00 USDT';
   return new Intl.NumberFormat('en-US', {
-    style: 'currency', currency: 'USD',
     minimumFractionDigits: 2, maximumFractionDigits: 2,
-  }).format(Number(v));
+  }).format(Number(v)) + ' USDT';
 };
 
 function WalletPage() {

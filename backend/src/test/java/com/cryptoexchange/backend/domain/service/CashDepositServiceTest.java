@@ -90,7 +90,7 @@ class CashDepositServiceTest {
 
     @Test
     void deposit_exactlyAtLimit_succeeds() {
-        // Given: already deposited $700, depositing $300 more (total = $1000, exactly at limit)
+        // Given: already deposited 700 USDT, depositing 300 USDT more (total = 1000 USDT, exactly at limit)
         BigDecimal amount = new BigDecimal("300.00");
         user.setCashBalanceUsd(new BigDecimal("700.00"));
         when(userAccountRepository.findByIdWithLock(userId)).thenReturn(Optional.of(user));
@@ -111,7 +111,7 @@ class CashDepositServiceTest {
 
     @Test
     void deposit_exceedingLimit_throwsException() {
-        // Given: already deposited $800, trying to deposit $300 (would be $1100 > $1000)
+        // Given: already deposited 800 USDT, trying to deposit 300 USDT (would be 1100 USDT > 1000 USDT)
         BigDecimal amount = new BigDecimal("300.00");
         when(userAccountRepository.findByIdWithLock(userId)).thenReturn(Optional.of(user));
         when(cashDepositRepository.sumDepositsSince(eq(userId), any(OffsetDateTime.class)))
@@ -129,7 +129,7 @@ class CashDepositServiceTest {
 
     @Test
     void deposit_fullLimitAlreadyUsed_throwsException() {
-        // Given: already deposited $1000 (limit fully used)
+        // Given: already deposited 1000 USDT (limit fully used)
         BigDecimal amount = new BigDecimal("1.00");
         when(userAccountRepository.findByIdWithLock(userId)).thenReturn(Optional.of(user));
         when(cashDepositRepository.sumDepositsSince(eq(userId), any(OffsetDateTime.class)))
@@ -186,7 +186,7 @@ class CashDepositServiceTest {
 
     @Test
     void deposit_multipleDepositsUnderLimit_allSucceed() {
-        // Given: first deposit $400
+        // Given: first deposit 400 USDT
         when(userAccountRepository.findByIdWithLock(userId)).thenReturn(Optional.of(user));
         when(cashDepositRepository.sumDepositsSince(eq(userId), any(OffsetDateTime.class)))
                 .thenReturn(BigDecimal.ZERO);
@@ -197,7 +197,7 @@ class CashDepositServiceTest {
         CashDepositService.CashBalanceInfo result1 = cashDepositService.deposit(userId, new BigDecimal("400.00"));
         assertThat(result1.cashUsd()).isEqualByComparingTo(new BigDecimal("400.00"));
 
-        // Given: second deposit $500 (total $900, under limit)
+        // Given: second deposit 500 USDT (total 900 USDT, under limit)
         user.setCashBalanceUsd(new BigDecimal("400.00"));
         when(cashDepositRepository.sumDepositsSince(eq(userId), any(OffsetDateTime.class)))
                 .thenReturn(new BigDecimal("400.00"));

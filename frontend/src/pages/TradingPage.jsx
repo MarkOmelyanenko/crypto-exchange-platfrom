@@ -13,9 +13,8 @@ import {
 const fmtUsd = (v, decimals = 2) => {
   if (v == null || isNaN(Number(v))) return '—';
   return new Intl.NumberFormat('en-US', {
-    style: 'currency', currency: 'USD',
     minimumFractionDigits: decimals, maximumFractionDigits: decimals,
-  }).format(Number(v));
+  }).format(Number(v)) + ' USDT';
 };
 
 const fmtQty = (v, maxDec = 8) => {
@@ -30,9 +29,9 @@ const fmtPairPrice = (v, quote) => {
   if (v == null || isNaN(Number(v))) return '—';
   const n = Number(v);
   if (quote === 'USDT' || quote === 'USDC') {
-    // Dollar-like stablecoins → show $ format
+    // Dollar-like stablecoins → show USDT format
     if (n >= 1) return fmtUsd(v);
-    return '$' + n.toFixed(8);
+    return n.toFixed(8) + ' USDT';
   }
   // Non-USD quote (BTC, ETH, BNB, etc.) → show raw number + symbol
   if (n >= 1) return `${n.toFixed(4)} ${quote}`;
@@ -622,7 +621,7 @@ function PriceChart({ data, range, quoteSymbol }) {
   const pad = (maxP - minP) * 0.1 || maxP * 0.01;
 
   const formatTickLabel = (v) => {
-    if (isUsd) return `$${v.toLocaleString()}`;
+    if (isUsd) return `${v.toLocaleString()} USDT`;
     return `${v}`;
   };
 

@@ -18,7 +18,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
- * Handles fictitious USD cash deposits with a rolling 24-hour limit of $1,000.
+ * Handles fictitious USD cash deposits with a rolling 24-hour limit of 1,000 USDT.
  */
 @Service
 @Transactional
@@ -87,8 +87,8 @@ public class CashDepositService {
 
         if (depositedLast24h.add(amountUsd).compareTo(DEPOSIT_LIMIT_24H) > 0) {
             throw new DepositLimitExceededException(
-                    String.format("Deposit of $%s would exceed the 24-hour limit of $%s. " +
-                                    "You have deposited $%s in the last 24 hours. Remaining limit: $%s.",
+                    String.format("Deposit of %s USDT would exceed the 24-hour limit of %s USDT. " +
+                                    "You have deposited %s USDT in the last 24 hours. Remaining limit: %s USDT.",
                             amountUsd.toPlainString(),
                             DEPOSIT_LIMIT_24H.toPlainString(),
                             depositedLast24h.toPlainString(),
@@ -108,7 +108,7 @@ public class CashDepositService {
         // Also credit the USDT Balance row so the trading engine can use the funds
         creditUsdtBalance(user, amountUsd);
 
-        log.info("Cash deposit of ${} for user {} successful. New balance: ${}",
+        log.info("Cash deposit of {} USDT for user {} successful. New balance: {} USDT",
                 amountUsd.toPlainString(), userId, user.getCashBalanceUsd().toPlainString());
 
         BigDecimal newDeposited = depositedLast24h.add(amountUsd);

@@ -451,11 +451,19 @@ public class DashboardService {
                     BigDecimal qty = trade.getBaseQty();
                     BigDecimal proceedsUsd = trade.getQuoteQty().multiply(quoteToUsd, MC);
                     if (quantity.compareTo(BigDecimal.ZERO) > 0) {
+                        // Only calculate realized PnL for the quantity we actually have in cost basis
+                        BigDecimal qtyToSell = qty.min(quantity);
                         BigDecimal avgCost = costBasis.divide(quantity, MC);
-                        BigDecimal costOfSold = qty.multiply(avgCost, MC);
-                        totalRealizedPnl = totalRealizedPnl.add(proceedsUsd.subtract(costOfSold, MC));
+                        BigDecimal costOfSold = qtyToSell.multiply(avgCost, MC);
+                        
+                        // Prorate proceeds if selling more than available (shouldn't happen, but handle gracefully)
+                        BigDecimal proratedProceeds = qtyToSell.compareTo(qty) < 0
+                            ? proceedsUsd.multiply(qtyToSell.divide(qty, MC), MC)
+                            : proceedsUsd;
+                        
+                        totalRealizedPnl = totalRealizedPnl.add(proratedProceeds.subtract(costOfSold, MC));
                         costBasis = costBasis.subtract(costOfSold, MC);
-                        quantity = quantity.subtract(qty, MC);
+                        quantity = quantity.subtract(qtyToSell, MC);
                         if (quantity.compareTo(BigDecimal.ZERO) < 0) quantity = BigDecimal.ZERO;
                         if (costBasis.compareTo(BigDecimal.ZERO) < 0) costBasis = BigDecimal.ZERO;
                     }
@@ -483,11 +491,19 @@ public class DashboardService {
                         quantity = quantity.add(tx.getQuantity());
                     } else { // SELL
                         if (quantity.compareTo(BigDecimal.ZERO) > 0) {
+                            // Only calculate realized PnL for the quantity we actually have in cost basis
+                            BigDecimal qtyToSell = tx.getQuantity().min(quantity);
                             BigDecimal avgCost = costBasis.divide(quantity, MC);
-                            BigDecimal costOfSold = tx.getQuantity().multiply(avgCost, MC);
-                            totalRealizedPnl = totalRealizedPnl.add(tx.getTotalUsd().subtract(costOfSold, MC));
+                            BigDecimal costOfSold = qtyToSell.multiply(avgCost, MC);
+                            
+                            // Prorate proceeds if selling more than available (shouldn't happen, but handle gracefully)
+                            BigDecimal proratedProceeds = qtyToSell.compareTo(tx.getQuantity()) < 0
+                                ? tx.getTotalUsd().multiply(qtyToSell.divide(tx.getQuantity(), MC), MC)
+                                : tx.getTotalUsd();
+                            
+                            totalRealizedPnl = totalRealizedPnl.add(proratedProceeds.subtract(costOfSold, MC));
                             costBasis = costBasis.subtract(costOfSold, MC);
-                            quantity = quantity.subtract(tx.getQuantity(), MC);
+                            quantity = quantity.subtract(qtyToSell, MC);
                             if (quantity.compareTo(BigDecimal.ZERO) < 0) quantity = BigDecimal.ZERO;
                             if (costBasis.compareTo(BigDecimal.ZERO) < 0) costBasis = BigDecimal.ZERO;
                         }

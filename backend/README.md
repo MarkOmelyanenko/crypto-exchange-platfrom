@@ -334,7 +334,7 @@ The assets feature provides a list page and detail page backed by live Binance p
 
 1. **List endpoint** (`GET /api/assets`): Uses `BinanceService.getBatchTicker24h()` to fetch
    24h ticker data for all assets in a single Binance API call. Returns `priceUsd` and
-   `change24hPercent` for each asset. USDT is always $1.00 / 0%.
+   `change24hPercent` for each asset. USDT is always 1.00 USDT / 0%.
 
 2. **Detail endpoint** (`GET /api/assets/{symbol}`): Uses `BinanceService.getTicker24h()` for
    the specific symbol, returning detailed stats (price, 24h change, high, low, volume).

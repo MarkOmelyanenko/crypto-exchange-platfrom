@@ -65,7 +65,7 @@ public class WalletController {
     }
 
     @PostMapping("/cash-deposit")
-    @Operation(summary = "Deposit USD cash", description = "Deposits USD to user account. Limited to $1,000 per rolling 24-hour window.")
+    @Operation(summary = "Deposit USD cash", description = "Deposits USD to user account. Limited to 1,000 USDT per rolling 24-hour window.")
     public ResponseEntity<CashBalanceResponse> cashDeposit(Authentication authentication,
                                                            @Valid @RequestBody CashDepositRequest request) {
         UUID userId = extractUserId(authentication);
@@ -119,7 +119,7 @@ public class WalletController {
 
     public static class CashDepositRequest {
         @NotNull(message = "Amount is required")
-        @DecimalMin(value = "0.01", message = "Deposit amount must be at least $0.01")
+        @DecimalMin(value = "0.01", message = "Deposit amount must be at least 0.01 USDT")
         public BigDecimal amountUsd;
     }
 

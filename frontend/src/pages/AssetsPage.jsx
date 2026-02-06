@@ -8,9 +8,8 @@ import { usePriceStream } from '../shared/hooks/usePriceStream';
 const fmt = (v, decimals = 2) => {
   if (v == null || isNaN(Number(v))) return '—';
   return new Intl.NumberFormat('en-US', {
-    style: 'currency', currency: 'USD',
     minimumFractionDigits: decimals, maximumFractionDigits: decimals,
-  }).format(Number(v));
+  }).format(Number(v)) + ' USDT';
 };
 
 const fmtPct = (v) => {
