@@ -35,9 +35,22 @@
 /**
  * @typedef {Object} UserMeResponse
  * @property {string} id - User ID (UUID)
+ * @property {string} login - User login/username
  * @property {string} email - User email address
  * @property {string} [createdAt] - Account creation timestamp
  * @property {string} [updatedAt] - Last update timestamp
+ */
+
+/**
+ * @typedef {Object} UpdateProfileRequest
+ * @property {string} login - User login/username (3-50 characters)
+ * @property {string} email - User email address (must be valid)
+ */
+
+/**
+ * @typedef {Object} ChangePasswordRequest
+ * @property {string} currentPassword - Current password
+ * @property {string} newPassword - New password (minimum 8 characters)
  */
 
 /**
