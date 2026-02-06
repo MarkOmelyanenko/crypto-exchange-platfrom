@@ -13,8 +13,20 @@ import java.util.UUID;
 
 @Repository
 public interface TradeRepository extends JpaRepository<Trade, UUID> {
-    List<Trade> findAllByMarketIdOrderByExecutedAtDesc(UUID marketId);
-    
-    @Query("SELECT t FROM Trade t WHERE t.market.id = :marketId ORDER BY t.executedAt DESC")
-    Page<Trade> findAllByMarketId(@Param("marketId") UUID marketId, Pageable pageable);
+
+    @Query("SELECT t FROM Trade t JOIN FETCH t.pair p JOIN FETCH p.baseAsset JOIN FETCH p.quoteAsset " +
+           "WHERE t.user.id = :userId ORDER BY t.createdAt DESC")
+    Page<Trade> findByUserIdOrderByCreatedAtDesc(@Param("userId") UUID userId, Pageable pageable);
+
+    @Query("SELECT t FROM Trade t JOIN FETCH t.pair p JOIN FETCH p.baseAsset JOIN FETCH p.quoteAsset " +
+           "WHERE t.pair.id = :pairId ORDER BY t.createdAt DESC")
+    Page<Trade> findAllByPairId(@Param("pairId") UUID pairId, Pageable pageable);
+
+    @Query("SELECT t FROM Trade t JOIN FETCH t.pair p JOIN FETCH p.baseAsset JOIN FETCH p.quoteAsset " +
+           "WHERE t.pair.id = :pairId ORDER BY t.createdAt DESC")
+    List<Trade> findAllByPairIdOrderByCreatedAtDesc(@Param("pairId") UUID pairId);
+
+    @Query("SELECT t FROM Trade t JOIN FETCH t.pair p JOIN FETCH p.baseAsset JOIN FETCH p.quoteAsset " +
+           "WHERE t.user.id = :userId AND t.pair.id = :pairId ORDER BY t.createdAt DESC")
+    List<Trade> findAllByUserIdAndPairIdOrderByCreatedAtDesc(@Param("userId") UUID userId, @Param("pairId") UUID pairId);
 }

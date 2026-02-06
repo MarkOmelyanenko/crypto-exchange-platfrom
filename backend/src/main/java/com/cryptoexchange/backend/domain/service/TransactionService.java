@@ -5,6 +5,7 @@ import com.cryptoexchange.backend.domain.exception.NotFoundException;
 import com.cryptoexchange.backend.domain.model.*;
 import com.cryptoexchange.backend.domain.repository.BalanceRepository;
 import com.cryptoexchange.backend.domain.repository.TransactionRepository;
+import com.cryptoexchange.backend.domain.repository.UserAccountRepository;
 import com.cryptoexchange.backend.domain.util.MoneyUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,17 +37,20 @@ public class TransactionService {
 
     private final TransactionRepository transactionRepository;
     private final BalanceRepository balanceRepository;
+    private final UserAccountRepository userAccountRepository;
     private final UserService userService;
     private final AssetService assetService;
     private final BinanceService binanceService;
 
     public TransactionService(TransactionRepository transactionRepository,
                               BalanceRepository balanceRepository,
+                              UserAccountRepository userAccountRepository,
                               UserService userService,
                               AssetService assetService,
                               BinanceService binanceService) {
         this.transactionRepository = transactionRepository;
         this.balanceRepository = balanceRepository;
+        this.userAccountRepository = userAccountRepository;
         this.userService = userService;
         this.assetService = assetService;
         this.binanceService = binanceService;
@@ -115,6 +119,7 @@ public class TransactionService {
 
     /**
      * BUY: deduct cash (USDT), credit asset holdings.
+     * Also syncs UserAccount.cashBalanceUsd for header display.
      */
     private void executeBuy(UserAccount user, Asset asset, Asset cashAsset,
                             BigDecimal quantity, BigDecimal totalUsd) {
@@ -123,18 +128,21 @@ public class TransactionService {
         // Lock and check USDT balance
         Balance cashBalance = balanceRepository.findByUserIdAndAssetIdWithLock(userId, cashAsset.getId())
                 .orElseThrow(() -> new InsufficientBalanceException(
-                        "No cash balance found. Please deposit USDT first."));
+                        "No cash balance found. Please deposit USD first."));
 
         if (cashBalance.getAvailable().compareTo(totalUsd) < 0) {
             throw new InsufficientBalanceException(
-                    String.format("Insufficient cash. Available: %s USDT, Required: %s USDT",
+                    String.format("Insufficient cash. Available: $%s, Required: $%s",
                             cashBalance.getAvailable().setScale(2, RoundingMode.HALF_UP),
                             totalUsd.setScale(2, RoundingMode.HALF_UP)));
         }
 
-        // Deduct cash
+        // Deduct cash from USDT Balance
         cashBalance.setAvailable(cashBalance.getAvailable().subtract(totalUsd));
         balanceRepository.save(cashBalance);
+
+        // Sync UserAccount.cashBalanceUsd so the header stays accurate
+        syncUserCashBalance(user, totalUsd.negate());
 
         // Credit asset
         Balance assetBalance = getOrCreateBalance(user, asset);
@@ -144,6 +152,7 @@ public class TransactionService {
 
     /**
      * SELL: deduct asset holdings, credit cash (USDT).
+     * Also syncs UserAccount.cashBalanceUsd for header display.
      */
     private void executeSell(UserAccount user, Asset asset, Asset cashAsset,
                              BigDecimal quantity, BigDecimal totalUsd) {
@@ -166,10 +175,31 @@ public class TransactionService {
         assetBalance.setAvailable(assetBalance.getAvailable().subtract(quantity));
         balanceRepository.save(assetBalance);
 
-        // Credit cash
+        // Credit cash to USDT Balance
         Balance cashBalance = getOrCreateBalance(user, cashAsset);
         cashBalance.setAvailable(cashBalance.getAvailable().add(totalUsd));
         balanceRepository.save(cashBalance);
+
+        // Sync UserAccount.cashBalanceUsd so the header stays accurate
+        syncUserCashBalance(user, totalUsd);
+    }
+
+    /**
+     * Keeps UserAccount.cashBalanceUsd in sync with USDT Balance changes
+     * so the header "Cash Balance" display is always accurate.
+     *
+     * @param delta positive = credit, negative = debit
+     */
+    private void syncUserCashBalance(UserAccount user, BigDecimal delta) {
+        UserAccount locked = userAccountRepository.findByIdWithLock(user.getId())
+                .orElse(user);
+        BigDecimal newBalance = locked.getCashBalanceUsd().add(delta);
+        // Floor at zero — shouldn't happen, but guard against rounding edge cases
+        if (newBalance.compareTo(BigDecimal.ZERO) < 0) {
+            newBalance = BigDecimal.ZERO;
+        }
+        locked.setCashBalanceUsd(newBalance);
+        userAccountRepository.save(locked);
     }
 
     private Balance getOrCreateBalance(UserAccount user, Asset asset) {

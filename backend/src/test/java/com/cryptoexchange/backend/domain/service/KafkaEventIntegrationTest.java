@@ -138,14 +138,14 @@ class KafkaEventIntegrationTest {
         // When - trigger matching (should create trade and publish TradeExecutedEvent after commit)
         matchingEngine.matchOrder(buyOrder.getId());
 //  - Removed to prevent Spring context loading
-        // Then - verify trade was created
+        // Then - verify trades were created (2 per fill: one BUY, one SELL)
         var trades = tradeRepository.findAll();
-        assertThat(trades).hasSize(1);
+        assertThat(trades).hasSize(2);
         
         Trade trade = trades.get(0);
         assertThat(trade.getId()).isNotNull();
         assertThat(trade.getPrice()).isEqualByComparingTo(price);
-        assertThat(trade.getAmount()).isEqualByComparingTo(amount);
+        assertThat(trade.getBaseQty()).isEqualByComparingTo(amount);
         
         // Note: The TradeExecutedEvent is published via @TransactionalEventListener(AFTER_COMMIT)
         // In a full test, we would consume from Kafka to verify, but for minimal testing,

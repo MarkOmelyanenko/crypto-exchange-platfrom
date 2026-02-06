@@ -172,6 +172,8 @@ public class MatchingEngine {
     /**
      * Executes a trade between taker and maker orders.
      * Handles balance settlement with price improvement for taker.
+     * Creates two Trade records: one for the buyer, one for the seller.
+     * Returns the taker's Trade record.
      */
     private Trade executeTrade(Order takerOrder, Order makerOrder, BigDecimal fillQty, 
                                BigDecimal tradePrice, BigDecimal quoteAmount) {
@@ -184,9 +186,14 @@ public class MatchingEngine {
         // Settle balances
         settleTradeBalances(buyerOrder, sellerOrder, fillQty, tradePrice, quoteAmount, market);
 
-        // Create trade record
-        Trade trade = new Trade(market, makerOrder, takerOrder, tradePrice, fillQty, quoteAmount);
-        trade = tradeRepository.save(trade);
+        // Create trade records (one per side)
+        Trade buyTrade = new Trade(buyerOrder.getUser(), market, OrderSide.BUY, tradePrice, fillQty, quoteAmount);
+        Trade sellTrade = new Trade(sellerOrder.getUser(), market, OrderSide.SELL, tradePrice, fillQty, quoteAmount);
+        buyTrade = tradeRepository.save(buyTrade);
+        sellTrade = tradeRepository.save(sellTrade);
+
+        // Return the taker's trade
+        Trade takerTrade = takerOrder.getSide() == OrderSide.BUY ? buyTrade : sellTrade;
 
         log.info("Executed trade: {} {} at {} {} (maker: {}, taker: {})",
             fillQty, market.getBaseAsset().getSymbol(),
@@ -194,18 +201,18 @@ public class MatchingEngine {
             makerOrder.getId(), takerOrder.getId());
 
         // Publish domain event - will be sent to Kafka AFTER transaction commit
-        Instant executedAtInstant = trade.getExecutedAt().toInstant();
+        Instant executedAtInstant = takerTrade.getCreatedAt().toInstant();
         eventPublisher.publishEvent(new DomainTradeExecuted(
             this, 
-            trade.getId(), 
+            takerTrade.getId(), 
             market.getSymbol(), 
             tradePrice, 
             fillQty, 
             executedAtInstant
         ));
-        log.debug("Published DomainTradeExecuted event for trade {} (will be sent to Kafka after commit)", trade.getId());
+        log.debug("Published DomainTradeExecuted event for trade {} (will be sent to Kafka after commit)", takerTrade.getId());
 
-        return trade;
+        return takerTrade;
     }
 
     /**

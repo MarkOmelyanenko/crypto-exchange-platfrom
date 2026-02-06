@@ -1,7 +1,9 @@
 package com.cryptoexchange.backend.domain.controller;
 
 import com.cryptoexchange.backend.domain.model.OrderSide;
+import com.cryptoexchange.backend.domain.model.Trade;
 import com.cryptoexchange.backend.domain.model.Transaction;
+import com.cryptoexchange.backend.domain.repository.TradeRepository;
 import com.cryptoexchange.backend.domain.service.TransactionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -10,6 +12,8 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -19,9 +23,10 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * Transaction endpoints: create BUY/SELL, list with filters, get by ID.
@@ -33,9 +38,11 @@ import java.util.stream.Collectors;
 public class TransactionController {
 
     private final TransactionService transactionService;
+    private final TradeRepository tradeRepository;
 
-    public TransactionController(TransactionService transactionService) {
+    public TransactionController(TransactionService transactionService, TradeRepository tradeRepository) {
         this.transactionService = transactionService;
+        this.tradeRepository = tradeRepository;
     }
 
     // ─── Create Transaction ───
@@ -58,7 +65,8 @@ public class TransactionController {
 
     @GetMapping
     @Operation(summary = "List transactions",
-               description = "Returns paginated transactions for the authenticated user with optional filters")
+               description = "Returns paginated, merged view of all transactions and market-order trades " +
+                             "for the authenticated user with optional filters")
     public ResponseEntity<PagedResponse> listTransactions(
             Authentication authentication,
             @RequestParam(required = false) String symbol,
@@ -76,17 +84,58 @@ public class TransactionController {
         if (side != null && !side.isBlank()) {
             sideEnum = OrderSide.valueOf(side.trim().toUpperCase());
         }
+        String normalizedSymbol = (symbol != null && !symbol.isBlank())
+                ? symbol.trim().toUpperCase() : null;
 
-        Page<Transaction> result = transactionService.listTransactions(
-                userId, symbol, sideEnum, from, to, sort, dir, page, size);
+        // ── 1) Fetch legacy Transaction records ──
+        Page<Transaction> txPage = transactionService.listTransactions(
+                userId, normalizedSymbol, sideEnum, from, to, sort, dir, 0, 10_000);
 
-        List<TransactionDto> items = result.getContent().stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
+        List<TransactionDto> merged = new ArrayList<>();
+        for (Transaction tx : txPage.getContent()) {
+            merged.add(toDto(tx));
+        }
+
+        // ── 2) Fetch Trade records (market orders from Trading page) ──
+        Page<Trade> tradePage = tradeRepository.findByUserIdOrderByCreatedAtDesc(
+                userId, PageRequest.of(0, 10_000, Sort.by(Sort.Direction.DESC, "createdAt")));
+
+        for (Trade t : tradePage.getContent()) {
+            TransactionDto dto = tradeToDto(t);
+
+            // Apply the same filters as for Transaction records
+            if (normalizedSymbol != null) {
+                boolean matchBase = dto.symbol.contains(normalizedSymbol);
+                boolean matchPair = dto.pairSymbol != null && dto.pairSymbol.contains(normalizedSymbol);
+                if (!matchBase && !matchPair) continue;
+            }
+            if (sideEnum != null && !dto.side.equals(sideEnum.name())) continue;
+            if (from != null && dto.createdAt.isBefore(from)) continue;
+            if (to != null && dto.createdAt.isAfter(to)) continue;
+
+            merged.add(dto);
+        }
+
+        // ── 3) Sort merged list ──
+        boolean ascending = "asc".equalsIgnoreCase(dir);
+        Comparator<TransactionDto> cmp;
+        if ("totalUsd".equalsIgnoreCase(sort)) {
+            cmp = Comparator.comparing(d -> d.totalUsd);
+        } else {
+            cmp = Comparator.comparing(d -> d.createdAt);
+        }
+        if (!ascending) cmp = cmp.reversed();
+        merged.sort(cmp);
+
+        // ── 4) Manual pagination ──
+        int totalItems = merged.size();
+        int fromIdx = Math.min(page * size, totalItems);
+        int toIdx = Math.min(fromIdx + size, totalItems);
+        List<TransactionDto> pageItems = merged.subList(fromIdx, toIdx);
+        int totalPages = (int) Math.ceil((double) totalItems / size);
 
         return ResponseEntity.ok(new PagedResponse(
-                items, (int) result.getTotalElements(), result.getNumber(),
-                result.getSize(), result.getTotalPages()));
+                pageItems, totalItems, page, size, totalPages));
     }
 
     // ─── Get Transaction by ID ───
@@ -115,12 +164,31 @@ public class TransactionController {
         TransactionDto dto = new TransactionDto();
         dto.id = tx.getId();
         dto.symbol = tx.getAssetSymbol();
+        dto.pairSymbol = tx.getAssetSymbol() + "/USDT";
+        dto.quoteAsset = "USDT";
         dto.side = tx.getSide().name();
         dto.quantity = tx.getQuantity().stripTrailingZeros();
         dto.priceUsd = tx.getPriceUsd().setScale(2, RoundingMode.HALF_UP);
         dto.totalUsd = tx.getTotalUsd().setScale(2, RoundingMode.HALF_UP);
         dto.feeUsd = tx.getFeeUsd().setScale(2, RoundingMode.HALF_UP);
         dto.createdAt = tx.getCreatedAt();
+        dto.source = "TRANSACTION";
+        return dto;
+    }
+
+    private TransactionDto tradeToDto(Trade t) {
+        TransactionDto dto = new TransactionDto();
+        dto.id = t.getId();
+        dto.symbol = t.getPair().getBaseAsset().getSymbol();
+        dto.pairSymbol = t.getPair().getSymbol();
+        dto.quoteAsset = t.getPair().getQuoteAsset().getSymbol();
+        dto.side = t.getSide().name();
+        dto.quantity = t.getBaseQty().stripTrailingZeros();
+        dto.priceUsd = t.getPrice().stripTrailingZeros();
+        dto.totalUsd = t.getQuoteQty().stripTrailingZeros();
+        dto.feeUsd = BigDecimal.ZERO;
+        dto.createdAt = t.getCreatedAt();
+        dto.source = "TRADE";
         return dto;
     }
 
@@ -140,13 +208,16 @@ public class TransactionController {
 
     public static class TransactionDto {
         public UUID id;
-        public String symbol;
+        public String symbol;        // base asset symbol (e.g., "BTC", "ETH")
+        public String pairSymbol;    // trading pair (e.g., "BTC/USDT", "ETH/BTC")
+        public String quoteAsset;    // quote currency (e.g., "USDT", "BTC")
         public String side;
         public BigDecimal quantity;
-        public BigDecimal priceUsd;
-        public BigDecimal totalUsd;
+        public BigDecimal priceUsd;  // price in quote currency (USD for USDT pairs)
+        public BigDecimal totalUsd;  // total in quote currency
         public BigDecimal feeUsd;
         public OffsetDateTime createdAt;
+        public String source;        // "TRANSACTION" or "TRADE"
     }
 
     public static class PagedResponse {

@@ -3,6 +3,7 @@ package com.cryptoexchange.backend.domain.controller;
 import com.cryptoexchange.backend.domain.exception.NotFoundException;
 import com.cryptoexchange.backend.domain.model.MarketTick;
 import com.cryptoexchange.backend.domain.model.MarketTrade;
+import com.cryptoexchange.backend.domain.service.BinanceService;
 import com.cryptoexchange.backend.domain.service.MarketService;
 import com.cryptoexchange.backend.domain.service.MarketSnapshotStore;
 import com.cryptoexchange.backend.domain.service.MarketTickStore;
@@ -42,11 +43,14 @@ class MarketControllerTest {
     @Mock
     private MarketTradeStore tradeStore;
 
+    @Mock
+    private BinanceService binanceService;
+
     private MarketController controller;
 
     @BeforeEach
     void setUp() {
-        controller = new MarketController(marketService, snapshotStore, tickStore, tradeStore);
+        controller = new MarketController(marketService, snapshotStore, tickStore, tradeStore, binanceService);
     }
 
     @Test

@@ -4,12 +4,23 @@ import { list, getById } from '../shared/api/services/transactionsService';
 
 /* ──────────────────── helpers ──────────────────── */
 
-const fmt = (v, decimals = 2) => {
+const fmtUsd = (v, decimals = 2) => {
   if (v == null || isNaN(Number(v))) return '—';
   return new Intl.NumberFormat('en-US', {
     style: 'currency', currency: 'USD',
     minimumFractionDigits: decimals, maximumFractionDigits: decimals,
   }).format(Number(v));
+};
+
+/** Format a value with its quote currency: "$1,234.56" for USDT, "0.02947 BTC" otherwise */
+const fmtQuote = (v, quoteAsset) => {
+  if (v == null || isNaN(Number(v))) return '—';
+  if (!quoteAsset || quoteAsset === 'USDT' || quoteAsset === 'USDC') {
+    return fmtUsd(v);
+  }
+  const n = Number(v);
+  // Use up to 8 decimal places for crypto-quoted values, strip trailing zeros
+  return n.toFixed(8).replace(/\.?0+$/, '') + ' ' + quoteAsset;
 };
 
 const fmtQty = (v) => {
@@ -118,7 +129,7 @@ function TransactionsPage() {
             value={symbol}
             onChange={(e) => setSymbol(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleFilter()}
-            placeholder="e.g. BTC"
+            placeholder="e.g. BTC, ETH/BTC"
             style={styles.filterInput}
           />
         </div>
@@ -177,15 +188,26 @@ function TransactionsPage() {
                     <td style={{ ...styles.td, textAlign: 'left', fontSize: 13, color: '#6b7280' }}>
                       {fmtDate(tx.createdAt)}
                     </td>
-                    <td style={{ ...styles.td, textAlign: 'left', fontWeight: 600 }}>{tx.symbol}</td>
+                    <td style={{ ...styles.td, textAlign: 'left', fontWeight: 600 }}>
+                      {tx.pairSymbol || tx.symbol}
+                      {tx.source === 'TRADE' && (
+                        <span style={{ marginLeft: 6, fontSize: 10, color: '#9ca3af', fontWeight: 400 }}>
+                          SPOT
+                        </span>
+                      )}
+                    </td>
                     <td style={{ ...styles.td, textAlign: 'center' }}>
                       <SideBadge side={tx.side} />
                     </td>
                     <td style={{ ...styles.td, textAlign: 'right', fontFamily: 'monospace' }}>
                       {fmtQty(tx.quantity)}
                     </td>
-                    <td style={{ ...styles.td, textAlign: 'right' }}>{fmt(tx.priceUsd)}</td>
-                    <td style={{ ...styles.td, textAlign: 'right', fontWeight: 500 }}>{fmt(tx.totalUsd)}</td>
+                    <td style={{ ...styles.td, textAlign: 'right' }}>
+                      {fmtQuote(tx.priceUsd, tx.quoteAsset)}
+                    </td>
+                    <td style={{ ...styles.td, textAlign: 'right', fontWeight: 500 }}>
+                      {fmtQuote(tx.totalUsd, tx.quoteAsset)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -273,13 +295,18 @@ function DetailModal({ tx, loading, onClose }) {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <DetailRow label="ID" value={tx.id} mono />
-            <DetailRow label="Symbol" value={tx.symbol} />
+            <DetailRow label="Pair" value={tx.pairSymbol || tx.symbol} />
             <DetailRow label="Side" value={<SideBadge side={tx.side} />} />
             <DetailRow label="Quantity" value={fmtQty(tx.quantity)} mono />
-            <DetailRow label="Price" value={fmt(tx.priceUsd)} />
-            <DetailRow label="Total" value={fmt(tx.totalUsd)} />
-            <DetailRow label="Fee" value={fmt(tx.feeUsd)} />
+            <DetailRow label="Price" value={fmtQuote(tx.priceUsd, tx.quoteAsset)} />
+            <DetailRow label="Total" value={fmtQuote(tx.totalUsd, tx.quoteAsset)} />
+            {tx.feeUsd != null && Number(tx.feeUsd) > 0 && (
+              <DetailRow label="Fee" value={fmtUsd(tx.feeUsd)} />
+            )}
             <DetailRow label="Date" value={fmtDate(tx.createdAt)} />
+            {tx.source && (
+              <DetailRow label="Source" value={tx.source === 'TRADE' ? 'Spot Trade' : 'Instant Buy/Sell'} />
+            )}
           </div>
         )}
       </div>

@@ -114,3 +114,11 @@
  * @property {number} size - Page size
  * @property {number} totalPages - Total pages
  */
+
+/**
+ * @typedef {Object} SSEPriceEvent
+ * @property {string} symbol - Asset symbol (e.g. 'BTC')
+ * @property {number} priceUsd - Current price in USD
+ * @property {number|null} change24hPercent - 24h price change percentage
+ * @property {string} ts - ISO-8601 timestamp of the price update
+ */

@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 
 import java.time.OffsetDateTime;
 import java.util.HashMap;
@@ -78,6 +79,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(error);
     }
 
+    @ExceptionHandler(com.cryptoexchange.backend.domain.service.CashDepositService.DepositLimitExceededException.class)
+    public ResponseEntity<ErrorResponse> handleDepositLimitExceededException(
+            com.cryptoexchange.backend.domain.service.CashDepositService.DepositLimitExceededException ex) {
+        log.warn("Deposit limit exceeded: {}", ex.getMessage());
+        ErrorResponse error = new ErrorResponse("DEPOSIT_LIMIT_EXCEEDED", ex.getMessage(), getRequestPath(), getRequestId());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgumentException(IllegalArgumentException ex) {
         log.warn("Invalid input: {}", ex.getMessage());
@@ -109,6 +118,12 @@ public class GlobalExceptionHandler {
         });
         ErrorResponse error = new ErrorResponse("VALIDATION_ERROR", "Validation failed", errors, getRequestPath(), getRequestId());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public void handleAsyncDisconnect(AsyncRequestNotUsableException ex) {
+        // SSE / async client disconnected — nothing to send back, just log at debug
+        log.debug("Client disconnected (SSE/async): {}", ex.getMessage());
     }
 
     @ExceptionHandler(Exception.class)

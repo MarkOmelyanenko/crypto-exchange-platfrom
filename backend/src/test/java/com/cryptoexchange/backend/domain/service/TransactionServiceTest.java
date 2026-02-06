@@ -5,6 +5,7 @@ import com.cryptoexchange.backend.domain.exception.NotFoundException;
 import com.cryptoexchange.backend.domain.model.*;
 import com.cryptoexchange.backend.domain.repository.BalanceRepository;
 import com.cryptoexchange.backend.domain.repository.TransactionRepository;
+import com.cryptoexchange.backend.domain.repository.UserAccountRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -32,6 +33,7 @@ class TransactionServiceTest {
 
     @Mock private TransactionRepository transactionRepository;
     @Mock private BalanceRepository balanceRepository;
+    @Mock private UserAccountRepository userAccountRepository;
     @Mock private UserService userService;
     @Mock private AssetService assetService;
     @Mock private BinanceService binanceService;
@@ -50,6 +52,7 @@ class TransactionServiceTest {
         userId = UUID.randomUUID();
         user = new UserAccount("testuser", "test@example.com", "hash");
         user.setId(userId);
+        user.setCashBalanceUsd(BigDecimal.ZERO);
 
         btcAssetId = UUID.randomUUID();
         btcAsset = new Asset("BTC", "Bitcoin", 8);
@@ -58,6 +61,12 @@ class TransactionServiceTest {
         usdtAssetId = UUID.randomUUID();
         usdtAsset = new Asset("USDT", "Tether", 2);
         usdtAsset.setId(usdtAssetId);
+    }
+
+    /** Stub that allows syncUserCashBalance to work. Call before execute() in success tests. */
+    private void stubSyncCashBalance() {
+        lenient().when(userAccountRepository.findByIdWithLock(userId)).thenReturn(Optional.of(user));
+        lenient().when(userAccountRepository.save(any(UserAccount.class))).thenAnswer(i -> i.getArgument(0));
     }
 
     private Balance makeBalance(UserAccount u, Asset a, String available) {
@@ -86,6 +95,7 @@ class TransactionServiceTest {
             when(binanceService.toBinanceSymbol("BTC")).thenReturn("BTCUSDT");
             when(binanceService.getCurrentPrice("BTCUSDT")).thenReturn(price);
             when(userService.getUser(userId)).thenReturn(user);
+            stubSyncCashBalance();
 
             Balance cashBalance = makeBalance(user, usdtAsset, "10000.00");
             when(balanceRepository.findByUserIdAndAssetIdWithLock(userId, usdtAssetId))
@@ -171,6 +181,7 @@ class TransactionServiceTest {
             when(binanceService.toBinanceSymbol("BTC")).thenReturn("BTCUSDT");
             when(binanceService.getCurrentPrice("BTCUSDT")).thenReturn(price);
             when(userService.getUser(userId)).thenReturn(user);
+            stubSyncCashBalance();
 
             Balance cashBalance = makeBalance(user, usdtAsset, "10000.00");
             when(balanceRepository.findByUserIdAndAssetIdWithLock(userId, usdtAssetId))
@@ -211,6 +222,7 @@ class TransactionServiceTest {
             when(binanceService.toBinanceSymbol("BTC")).thenReturn("BTCUSDT");
             when(binanceService.getCurrentPrice("BTCUSDT")).thenReturn(price);
             when(userService.getUser(userId)).thenReturn(user);
+            stubSyncCashBalance();
 
             Balance btcBalance = makeBalance(user, btcAsset, "1.0");
             when(balanceRepository.findByUserIdAndAssetIdWithLock(userId, btcAssetId))

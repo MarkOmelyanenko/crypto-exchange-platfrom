@@ -17,7 +17,7 @@ public interface BalanceRepository extends JpaRepository<Balance, UUID> {
     @Query("SELECT b FROM Balance b WHERE b.user.id = :userId AND b.asset.id = :assetId")
     Optional<Balance> findByUserIdAndAssetId(@Param("userId") UUID userId, @Param("assetId") UUID assetId);
     
-    @Query("SELECT b FROM Balance b WHERE b.user.id = :userId")
+    @Query("SELECT b FROM Balance b JOIN FETCH b.asset WHERE b.user.id = :userId")
     List<Balance> findAllByUserId(@Param("userId") UUID userId);
     
     @Lock(LockModeType.PESSIMISTIC_WRITE)

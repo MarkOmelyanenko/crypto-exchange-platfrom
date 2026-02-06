@@ -119,8 +119,8 @@ class MatchingEngineTest {
         assertThat(trades).hasSize(1);
         Trade trade = trades.get(0);
         assertThat(trade.getPrice()).isEqualByComparingTo(new BigDecimal("50000.0")); // Maker price
-        assertThat(trade.getAmount()).isEqualByComparingTo(new BigDecimal("1.0"));
-        assertThat(trade.getQuoteAmount()).isEqualByComparingTo(new BigDecimal("50000.0"));
+        assertThat(trade.getBaseQty()).isEqualByComparingTo(new BigDecimal("1.0"));
+        assertThat(trade.getQuoteQty()).isEqualByComparingTo(new BigDecimal("50000.0"));
 //  - Removed to prevent Spring context loading
         // Reload orders
         Order updatedBuyOrder = orderRepository.findById(buyOrder.getId()).orElseThrow();
@@ -174,7 +174,7 @@ class MatchingEngineTest {
         // Assertions
         assertThat(trades).hasSize(1);
         Trade trade = trades.get(0);
-        assertThat(trade.getAmount()).isEqualByComparingTo(new BigDecimal("1.0"));
+        assertThat(trade.getBaseQty()).isEqualByComparingTo(new BigDecimal("1.0"));
 //  - Removed to prevent Spring context loading
         // Reload orders
         Order updatedBuyOrder = orderRepository.findById(buyOrder.getId()).orElseThrow();

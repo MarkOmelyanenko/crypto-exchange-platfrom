@@ -29,6 +29,25 @@ export const ENDPOINTS = {
     snapshot: '/api/prices/snapshot',
     history: '/api/prices/history',
   },
+  stream: {
+    prices: (symbols) => `/api/stream/prices?symbols=${encodeURIComponent(symbols.join(','))}`,
+    status: '/api/stream/status',
+  },
+  wallet: {
+    balance: '/api/wallet/balance',
+    balances: '/api/wallet/balances',
+    cashDeposit: '/api/wallet/cash-deposit',
+    deposit: '/api/wallet/deposit',
+  },
+  markets: {
+    pairs: '/api/markets/pairs',
+    price: (pairId) => `/api/markets/price?pairId=${pairId}`,
+    history: (pairId, range) => `/api/markets/history?pairId=${pairId}&range=${range}`,
+  },
+  orders: {
+    market: '/api/orders/market',
+    trades: '/api/orders/trades',
+  },
   system: {
     health: '/api/system/health',
   },

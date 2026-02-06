@@ -1,6 +1,7 @@
 package com.cryptoexchange.backend.domain.model;
 
 import jakarta.persistence.*;
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.Objects;
 import java.util.UUID;
@@ -25,6 +26,9 @@ public class UserAccount {
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
+    @Column(name = "cash_balance_usd", nullable = false, precision = 38, scale = 2)
+    private BigDecimal cashBalanceUsd = BigDecimal.ZERO;
+
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
@@ -33,6 +37,9 @@ public class UserAccount {
         OffsetDateTime now = OffsetDateTime.now();
         createdAt = now;
         updatedAt = now;
+        if (cashBalanceUsd == null) {
+            cashBalanceUsd = BigDecimal.ZERO;
+        }
     }
 
     @PreUpdate
@@ -81,6 +88,14 @@ public class UserAccount {
 
     public void setPasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
+    }
+
+    public BigDecimal getCashBalanceUsd() {
+        return cashBalanceUsd;
+    }
+
+    public void setCashBalanceUsd(BigDecimal cashBalanceUsd) {
+        this.cashBalanceUsd = cashBalanceUsd;
     }
 
     public OffsetDateTime getCreatedAt() {

@@ -85,7 +85,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
 
         if (requestUri.startsWith("/api/orders") && requestUri.matches("/api/orders/?$")) {
             return "orders";
-        } else if (requestUri.startsWith("/api/wallet/deposit")) {
+        } else if (requestUri.startsWith("/api/wallet/cash-deposit") || requestUri.startsWith("/api/wallet/deposit")) {
             return "wallet-deposit";
         } else if (requestUri.startsWith("/api/wallet/withdraw")) {
             return "wallet-withdraw";

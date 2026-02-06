@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.RoundingMode;
 import java.util.UUID;
 
 @RestController
@@ -30,7 +31,7 @@ public class TradeController {
     public ResponseEntity<Page<TradeResponse>> listTrades(
             @RequestParam @NotNull(message = "Market ID is required") UUID marketId,
             Pageable pageable) {
-        Page<Trade> trades = tradeRepository.findAllByMarketId(marketId, pageable);
+        Page<Trade> trades = tradeRepository.findAllByPairId(marketId, pageable);
         Page<TradeResponse> response = trades.map(TradeResponse::from);
         return ResponseEntity.ok(response);
     }
@@ -38,26 +39,24 @@ public class TradeController {
     // DTO
     public static class TradeResponse {
         public UUID id;
-        public UUID marketId;
-        public String marketSymbol;
-        public UUID makerOrderId;
-        public UUID takerOrderId;
+        public UUID pairId;
+        public String pairSymbol;
+        public String side;
         public java.math.BigDecimal price;
-        public java.math.BigDecimal quantity;
-        public java.math.BigDecimal quoteAmount;
-        public java.time.OffsetDateTime executedAt;
+        public java.math.BigDecimal baseQty;
+        public java.math.BigDecimal quoteQty;
+        public java.time.OffsetDateTime createdAt;
 
         public static TradeResponse from(Trade trade) {
             TradeResponse response = new TradeResponse();
             response.id = trade.getId();
-            response.marketId = trade.getMarket().getId();
-            response.marketSymbol = trade.getMarket().getSymbol();
-            response.makerOrderId = trade.getMakerOrder().getId();
-            response.takerOrderId = trade.getTakerOrder().getId();
-            response.price = trade.getPrice();
-            response.quantity = trade.getAmount();
-            response.quoteAmount = trade.getQuoteAmount();
-            response.executedAt = trade.getExecutedAt();
+            response.pairId = trade.getPair().getId();
+            response.pairSymbol = trade.getPair().getSymbol();
+            response.side = trade.getSide().name();
+            response.price = trade.getPrice().stripTrailingZeros();
+            response.baseQty = trade.getBaseQty().stripTrailingZeros();
+            response.quoteQty = trade.getQuoteQty().setScale(2, RoundingMode.HALF_UP);
+            response.createdAt = trade.getCreatedAt();
             return response;
         }
     }

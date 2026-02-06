@@ -74,7 +74,7 @@ public class DashboardService {
         BigDecimal unrealizedPnlUsd = BigDecimal.ZERO;
         BigDecimal totalCostBasis = BigDecimal.ZERO;
 
-        // Get current prices for all assets
+        // Get current prices for all assets (in USDT)
         Map<String, BigDecimal> currentPrices = getCurrentPrices();
 
         // Calculate holdings value and cost basis
@@ -96,8 +96,8 @@ public class DashboardService {
                 BigDecimal marketValue = quantity.multiply(currentPrice, MC);
                 totalValueUsd = totalValueUsd.add(marketValue);
 
-                // Calculate average buy price and cost basis
-                BigDecimal avgBuyPrice = calculateAverageBuyPrice(userId, asset.getId());
+                // Calculate average buy price and cost basis (USDT-converted)
+                BigDecimal avgBuyPrice = calculateAverageBuyPrice(userId, asset.getId(), currentPrices);
                 BigDecimal costBasis = quantity.multiply(avgBuyPrice, MC);
                 totalCostBasis = totalCostBasis.add(costBasis);
                 unrealizedPnlUsd = unrealizedPnlUsd.add(marketValue.subtract(costBasis, MC));
@@ -105,7 +105,7 @@ public class DashboardService {
         }
 
         // Calculate realized PnL from trades
-        BigDecimal realizedPnlUsd = calculateRealizedPnl(userId);
+        BigDecimal realizedPnlUsd = calculateRealizedPnl(userId, currentPrices);
 
         // Calculate unrealized PnL percentage
         BigDecimal unrealizedPnlPercent = BigDecimal.ZERO;
@@ -154,7 +154,7 @@ public class DashboardService {
             }
 
             BigDecimal currentPrice = currentPrices.getOrDefault(asset.getSymbol(), BigDecimal.ZERO);
-            BigDecimal avgBuyPrice = calculateAverageBuyPrice(userId, asset.getId());
+            BigDecimal avgBuyPrice = calculateAverageBuyPrice(userId, asset.getId(), currentPrices);
             BigDecimal marketValue = quantity.multiply(currentPrice, MC);
             BigDecimal costBasis = quantity.multiply(avgBuyPrice, MC);
             BigDecimal unrealizedPnl = marketValue.subtract(costBasis, MC);
@@ -182,8 +182,8 @@ public class DashboardService {
     }
 
     /**
-     * Get recent transactions for user — merges legacy Orders and new Transaction records,
-     * sorted by date descending, limited to {@code limit} entries.
+     * Get recent transactions for user — merges legacy Orders, Transaction records,
+     * and market-order Trade records, sorted by date descending, limited to {@code limit} entries.
      */
     @Transactional(readOnly = true)
     public List<TransactionSummary> getRecentTransactions(UUID userId, int limit) {
@@ -202,7 +202,7 @@ public class DashboardService {
                 tx.getQuantity(),
                 tx.getPriceUsd().setScale(2, RoundingMode.HALF_UP),
                 tx.getCreatedAt(),
-                "COMPLETED" // MVP transactions are always immediately completed
+                "COMPLETED"
             ));
         }
 
@@ -235,6 +235,24 @@ public class DashboardService {
             ));
         }
 
+        // 3) Market-order Trade records (from Trading page)
+        Page<Trade> tradePage = tradeRepository.findByUserIdOrderByCreatedAtDesc(
+                userId,
+                PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt")));
+
+        for (Trade trade : tradePage.getContent()) {
+            String pairSymbol = trade.getPair().getSymbol(); // e.g., "ETH/BTC"
+            summaries.add(new TransactionSummary(
+                trade.getId(),
+                trade.getSide().name(),
+                pairSymbol,
+                trade.getBaseQty(),
+                trade.getPrice(),
+                trade.getCreatedAt(),
+                "COMPLETED"
+            ));
+        }
+
         // Sort merged list by timestamp descending & limit
         summaries.sort(Comparator.comparing((TransactionSummary s) -> s.timestamp).reversed());
         return summaries.stream().limit(limit).collect(Collectors.toList());
@@ -250,52 +268,101 @@ public class DashboardService {
     }
 
     /**
-     * Calculate average buy price for an asset using weighted average cost basis.
-     * Combines legacy Trade records (order-matching engine) and new Transaction records
-     * (instant buy/sell), sorted chronologically to maintain correct cost basis.
+     * Calculate average buy price (in USDT) for an asset using weighted average cost basis.
+     * Handles three kinds of records:
+     *   1a) Trade records where the asset is the BASE (e.g. BTC in BTC/USDT or BTC/ETH)
+     *   1b) Trade records where the asset is the QUOTE (e.g. BTC in ETH/BTC)
+     *   2)  Transaction records (instant buy/sell, always USDT-denominated)
+     *
+     * For cross-pair trades (non-USDT quote), quoteQty is converted to USDT using
+     * current prices (approximation — historical USDT price is not stored in trade records).
+     *
+     * @param currentPrices map of asset symbol → current USDT price
      */
-    private BigDecimal calculateAverageBuyPrice(UUID userId, UUID assetId) {
+    private BigDecimal calculateAverageBuyPrice(UUID userId, UUID assetId,
+                                                 Map<String, BigDecimal> currentPrices) {
         BigDecimal totalQuantity = BigDecimal.ZERO;
-        BigDecimal totalCost = BigDecimal.ZERO;
+        BigDecimal totalCost = BigDecimal.ZERO; // always in USDT
 
-        // ── 1) Legacy Trade records (order-matching engine) ──
-        List<Market> markets = marketService.listActiveMarkets().stream()
+        // ── 1) Trade records (market orders + order-matching engine) ──
+        List<Market> allMarkets = marketService.listActiveMarkets();
+
+        // Markets where the tracked asset is the BASE (BUY = acquire, SELL = dispose)
+        List<Market> baseMarkets = allMarkets.stream()
             .filter(m -> m.getBaseAsset().getId().equals(assetId))
             .collect(Collectors.toList());
 
+        // Markets where the tracked asset is the QUOTE (SELL on market = receive quote = acquire)
+        List<Market> quoteMarkets = allMarkets.stream()
+            .filter(m -> m.getQuoteAsset().getId().equals(assetId))
+            .collect(Collectors.toList());
+
+        Set<UUID> quoteMarketIds = quoteMarkets.stream()
+            .map(Market::getId).collect(Collectors.toSet());
+
         List<Trade> allTrades = new ArrayList<>();
-        for (Market market : markets) {
-            allTrades.addAll(tradeRepository.findAllByMarketIdOrderByExecutedAtDesc(market.getId()));
+        for (Market m : baseMarkets) {
+            allTrades.addAll(tradeRepository.findAllByPairIdOrderByCreatedAtDesc(m.getId()));
         }
-        allTrades.sort(Comparator.comparing(Trade::getExecutedAt));
+        for (Market m : quoteMarkets) {
+            allTrades.addAll(tradeRepository.findAllByPairIdOrderByCreatedAtDesc(m.getId()));
+        }
+        allTrades.sort(Comparator.comparing(Trade::getCreatedAt));
 
         for (Trade trade : allTrades) {
-            Order buyerOrder = trade.getMakerOrder().getSide() == OrderSide.BUY 
-                ? trade.getMakerOrder() 
-                : trade.getTakerOrder();
-            Order sellerOrder = trade.getMakerOrder().getSide() == OrderSide.SELL 
-                ? trade.getMakerOrder() 
-                : trade.getTakerOrder();
+            if (!trade.getUser().getId().equals(userId)) continue;
 
-            if (buyerOrder.getUser().getId().equals(userId)) {
-                BigDecimal qty = trade.getAmount();
-                BigDecimal cost = trade.getQuoteAmount();
-                totalQuantity = totalQuantity.add(qty);
-                totalCost = totalCost.add(cost);
-            } else if (sellerOrder.getUser().getId().equals(userId)) {
-                BigDecimal qty = trade.getAmount();
-                if (totalQuantity.compareTo(BigDecimal.ZERO) > 0) {
-                    BigDecimal avgCost = totalCost.divide(totalQuantity, MC);
-                    BigDecimal costToRemove = qty.multiply(avgCost, MC);
-                    totalQuantity = totalQuantity.subtract(qty);
-                    totalCost = totalCost.subtract(costToRemove);
-                    if (totalQuantity.compareTo(BigDecimal.ZERO) < 0) totalQuantity = BigDecimal.ZERO;
-                    if (totalCost.compareTo(BigDecimal.ZERO) < 0) totalCost = BigDecimal.ZERO;
+            boolean isQuoteMarket = quoteMarketIds.contains(trade.getPair().getId());
+
+            if (isQuoteMarket) {
+                // ── Asset is the QUOTE of this market ──
+                // SELL on market → user sold base, received quote → ACQUIRE our asset
+                // BUY on market → user bought base, spent quote → DISPOSE our asset
+                if (trade.getSide() == OrderSide.SELL) {
+                    BigDecimal qty = trade.getQuoteQty();
+                    // Cost in USDT ≈ baseQty × current USDT price of the base asset
+                    String baseSymbol = trade.getPair().getBaseAsset().getSymbol();
+                    BigDecimal baseUsdPrice = currentPrices.getOrDefault(baseSymbol, BigDecimal.ZERO);
+                    BigDecimal costUsd = trade.getBaseQty().multiply(baseUsdPrice, MC);
+                    totalQuantity = totalQuantity.add(qty);
+                    totalCost = totalCost.add(costUsd);
+                } else { // BUY — user spent quote (our asset) → reduce position
+                    BigDecimal qty = trade.getQuoteQty();
+                    if (totalQuantity.compareTo(BigDecimal.ZERO) > 0) {
+                        BigDecimal avgCost = totalCost.divide(totalQuantity, MC);
+                        BigDecimal costToRemove = qty.multiply(avgCost, MC);
+                        totalQuantity = totalQuantity.subtract(qty);
+                        totalCost = totalCost.subtract(costToRemove);
+                        if (totalQuantity.compareTo(BigDecimal.ZERO) < 0) totalQuantity = BigDecimal.ZERO;
+                        if (totalCost.compareTo(BigDecimal.ZERO) < 0) totalCost = BigDecimal.ZERO;
+                    }
+                }
+            } else {
+                // ── Asset is the BASE of this market (existing logic, with USDT conversion) ──
+                String quoteSymbol = trade.getPair().getQuoteAsset().getSymbol();
+                BigDecimal quoteToUsd = "USDT".equals(quoteSymbol) ? BigDecimal.ONE
+                    : currentPrices.getOrDefault(quoteSymbol, BigDecimal.ZERO);
+
+                if (trade.getSide() == OrderSide.BUY) {
+                    BigDecimal qty = trade.getBaseQty();
+                    BigDecimal costUsd = trade.getQuoteQty().multiply(quoteToUsd, MC);
+                    totalQuantity = totalQuantity.add(qty);
+                    totalCost = totalCost.add(costUsd);
+                } else { // SELL
+                    BigDecimal qty = trade.getBaseQty();
+                    if (totalQuantity.compareTo(BigDecimal.ZERO) > 0) {
+                        BigDecimal avgCost = totalCost.divide(totalQuantity, MC);
+                        BigDecimal costToRemove = qty.multiply(avgCost, MC);
+                        totalQuantity = totalQuantity.subtract(qty);
+                        totalCost = totalCost.subtract(costToRemove);
+                        if (totalQuantity.compareTo(BigDecimal.ZERO) < 0) totalQuantity = BigDecimal.ZERO;
+                        if (totalCost.compareTo(BigDecimal.ZERO) < 0) totalCost = BigDecimal.ZERO;
+                    }
                 }
             }
         }
 
-        // ── 2) New Transaction records (instant buy/sell) ──
+        // ── 2) New Transaction records (instant buy/sell — always USDT-denominated) ──
         try {
             Asset asset = assetService.getAsset(assetId);
             Page<Transaction> txPage = transactionRepository.findFiltered(
@@ -329,40 +396,64 @@ public class DashboardService {
 
     /**
      * Calculate realized PnL from completed sell trades and sell transactions.
-     * Uses average cost method: when selling, realized PnL = (sellPrice - avgCost) * quantity
+     * Uses average cost method: when selling, realized PnL = (sellProceeds − avgCost × qty).
+     *
+     * Handles cross-pair trades by converting proceeds/costs to USDT using currentPrices.
+     * Groups all trades for each base asset (across all markets) so the cost basis
+     * is shared regardless of which market the asset was traded on.
+     *
+     * @param currentPrices map of asset symbol → current USDT price
      */
-    private BigDecimal calculateRealizedPnl(UUID userId) {
-        List<Market> markets = marketService.listActiveMarkets();
+    private BigDecimal calculateRealizedPnl(UUID userId, Map<String, BigDecimal> currentPrices) {
         BigDecimal totalRealizedPnl = BigDecimal.ZERO;
+        List<Market> allMarkets = marketService.listActiveMarkets();
 
-        // ── 1) Legacy Trade records per market ──
-        for (Market market : markets) {
-            List<Trade> trades = tradeRepository.findAllByMarketIdOrderByExecutedAtDesc(market.getId());
-            trades.sort(Comparator.comparing(Trade::getExecutedAt));
+        // Collect ALL trades the user participated in, across all markets
+        Set<UUID> seenTradeIds = new HashSet<>();
+        List<Trade> allUserTrades = new ArrayList<>();
+        for (Market market : allMarkets) {
+            for (Trade trade : tradeRepository.findAllByPairIdOrderByCreatedAtDesc(market.getId())) {
+                if (trade.getUser().getId().equals(userId) && seenTradeIds.add(trade.getId())) {
+                    allUserTrades.add(trade);
+                }
+            }
+        }
+        allUserTrades.sort(Comparator.comparing(Trade::getCreatedAt));
 
-            BigDecimal costBasis = BigDecimal.ZERO;
+        // Group trades by the asset they affect: for each asset, track cost basis + realized PnL
+        // An asset is affected if it's the BASE or the QUOTE of the trade's market.
+        // We only compute realized PnL for the BASE-side position (buy base / sell base),
+        // treating the quote-side as the "cash" leg. For cross-pair (non-USDT) quotes,
+        // we convert to USDT.
+        // We need per-asset grouping to maintain a single cost basis per asset.
+        Map<UUID, List<Trade>> tradesByBaseAsset = new LinkedHashMap<>();
+
+        for (Trade trade : allUserTrades) {
+            UUID baseAssetId = trade.getPair().getBaseAsset().getId();
+            tradesByBaseAsset.computeIfAbsent(baseAssetId, k -> new ArrayList<>()).add(trade);
+        }
+
+        for (Map.Entry<UUID, List<Trade>> entry : tradesByBaseAsset.entrySet()) {
+            BigDecimal costBasis = BigDecimal.ZERO; // in USDT
             BigDecimal quantity = BigDecimal.ZERO;
 
-            for (Trade trade : trades) {
-                Order buyerOrder = trade.getMakerOrder().getSide() == OrderSide.BUY 
-                    ? trade.getMakerOrder() 
-                    : trade.getTakerOrder();
-                Order sellerOrder = trade.getMakerOrder().getSide() == OrderSide.SELL 
-                    ? trade.getMakerOrder() 
-                    : trade.getTakerOrder();
+            for (Trade trade : entry.getValue()) {
+                String quoteSymbol = trade.getPair().getQuoteAsset().getSymbol();
+                BigDecimal quoteToUsd = "USDT".equals(quoteSymbol) ? BigDecimal.ONE
+                    : currentPrices.getOrDefault(quoteSymbol, BigDecimal.ZERO);
 
-                if (buyerOrder.getUser().getId().equals(userId)) {
-                    BigDecimal qty = trade.getAmount();
-                    BigDecimal cost = trade.getQuoteAmount();
-                    costBasis = costBasis.add(cost);
+                if (trade.getSide() == OrderSide.BUY) {
+                    BigDecimal qty = trade.getBaseQty();
+                    BigDecimal costUsd = trade.getQuoteQty().multiply(quoteToUsd, MC);
+                    costBasis = costBasis.add(costUsd);
                     quantity = quantity.add(qty);
-                } else if (sellerOrder.getUser().getId().equals(userId)) {
-                    BigDecimal qty = trade.getAmount();
-                    BigDecimal sellProceeds = trade.getQuoteAmount();
+                } else { // SELL
+                    BigDecimal qty = trade.getBaseQty();
+                    BigDecimal proceedsUsd = trade.getQuoteQty().multiply(quoteToUsd, MC);
                     if (quantity.compareTo(BigDecimal.ZERO) > 0) {
                         BigDecimal avgCost = costBasis.divide(quantity, MC);
                         BigDecimal costOfSold = qty.multiply(avgCost, MC);
-                        totalRealizedPnl = totalRealizedPnl.add(sellProceeds.subtract(costOfSold, MC));
+                        totalRealizedPnl = totalRealizedPnl.add(proceedsUsd.subtract(costOfSold, MC));
                         costBasis = costBasis.subtract(costOfSold, MC);
                         quantity = quantity.subtract(qty, MC);
                         if (quantity.compareTo(BigDecimal.ZERO) < 0) quantity = BigDecimal.ZERO;
@@ -372,7 +463,7 @@ public class DashboardService {
             }
         }
 
-        // ── 2) New Transaction records (all assets at once) ──
+        // ── 2) New Transaction records (all assets at once — always USDT) ──
         try {
             Page<Transaction> txPage = transactionRepository.findFiltered(
                     userId, null, null, null, null,
@@ -382,11 +473,11 @@ public class DashboardService {
             Map<String, List<Transaction>> byAsset = txPage.getContent().stream()
                     .collect(Collectors.groupingBy(Transaction::getAssetSymbol));
 
-            for (Map.Entry<String, List<Transaction>> entry : byAsset.entrySet()) {
+            for (Map.Entry<String, List<Transaction>> txEntry : byAsset.entrySet()) {
                 BigDecimal costBasis = BigDecimal.ZERO;
                 BigDecimal quantity = BigDecimal.ZERO;
 
-                for (Transaction tx : entry.getValue()) {
+                for (Transaction tx : txEntry.getValue()) {
                     if (tx.getSide() == OrderSide.BUY) {
                         costBasis = costBasis.add(tx.getTotalUsd());
                         quantity = quantity.add(tx.getQuantity());

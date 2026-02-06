@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { getSummary, getHoldings, getRecentTransactions } from '../shared/api/services/dashboardService';
 import { getHistory } from '../shared/api/services/priceService';
 import { getHealth } from '../shared/api/services/systemService';
+import { usePriceStream } from '../shared/hooks/usePriceStream';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
@@ -53,6 +54,13 @@ function DashboardPage() {
   });
   const [errors, setErrors] = useState({});
   const holdingsRef = useRef([]);
+
+  // Live price stream for holdings symbols
+  const holdingSymbols = useMemo(
+    () => holdings.filter(h => h.symbol !== 'USDT').map(h => h.symbol),
+    [holdings]
+  );
+  const { prices: livePrices, connected: liveConnected, error: liveError } = usePriceStream(holdingSymbols);
 
   const loadDashboardData = useCallback(async () => {
     setLoading({ summary: true, holdings: true, transactions: true, chart: true, health: true });
@@ -139,7 +147,10 @@ function DashboardPage() {
 
   return (
     <div style={{ maxWidth: 1400, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 24, color: '#111827' }}>Dashboard</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+        <h1 style={{ fontSize: 28, fontWeight: 700, color: '#111827', margin: 0 }}>Dashboard</h1>
+        <LiveIndicator connected={liveConnected} error={liveError} />
+      </div>
 
       {/* ─── Summary Cards ─── */}
       {errors.summary ? (
@@ -168,7 +179,7 @@ function DashboardPage() {
         {errors.holdings ? (
           <ErrorBox message="Failed to load holdings" onRetry={loadDashboardData} />
         ) : (
-          <HoldingsTable holdings={holdings} loading={loading.holdings} />
+          <HoldingsTable holdings={holdings} loading={loading.holdings} livePrices={livePrices} />
         )}
       </Section>
 
@@ -235,7 +246,7 @@ function SummaryCard({ label, value, valueColor, loading }) {
   );
 }
 
-function HoldingsTable({ holdings, loading }) {
+function HoldingsTable({ holdings, loading, livePrices = {} }) {
   const [sortBy, setSortBy] = useState('marketValue');
   const [sortAsc, setSortAsc] = useState(false);
 
@@ -244,7 +255,29 @@ function HoldingsTable({ holdings, loading }) {
     else { setSortBy(field); setSortAsc(false); }
   };
 
-  const sorted = [...holdings].sort((a, b) => {
+  // Enrich holdings with live prices — recalculate PnL with real-time data
+  const enriched = holdings.map((h) => {
+    const live = livePrices[h.symbol];
+    if (live && live.priceUsd != null) {
+      const currentPrice = Number(live.priceUsd);
+      const qty = Number(h.quantity) || 0;
+      const avgBuy = Number(h.avgBuyPriceUsd) || 0;
+      const marketValue = qty * currentPrice;
+      const costBasis = qty * avgBuy;
+      const pnl = marketValue - costBasis;
+      const pnlPct = costBasis > 0 ? (pnl / costBasis) * 100 : 0;
+      return {
+        ...h,
+        currentPriceUsd: currentPrice,
+        marketValueUsd: marketValue,
+        unrealizedPnlUsd: pnl,
+        unrealizedPnlPercent: pnlPct,
+      };
+    }
+    return h;
+  });
+
+  const sorted = [...enriched].sort((a, b) => {
     const av = sortBy === 'marketValue' ? Number(a.marketValueUsd) : Number(a.unrealizedPnlUsd);
     const bv = sortBy === 'marketValue' ? Number(b.marketValueUsd) : Number(b.unrealizedPnlUsd);
     return sortAsc ? av - bv : bv - av;
@@ -507,6 +540,35 @@ function Skeleton({ height = 40 }) {
     }}>
       <style>{`@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
     </div>
+  );
+}
+
+function LiveIndicator({ connected, error }) {
+  if (error) {
+    return (
+      <span style={{ fontSize: 12, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#f59e0b', display: 'inline-block' }} />
+        {error}
+      </span>
+    );
+  }
+  if (connected) {
+    return (
+      <span style={{ fontSize: 12, color: '#10b981', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <span style={{
+          width: 7, height: 7, borderRadius: '50%', backgroundColor: '#10b981',
+          display: 'inline-block', animation: 'livePulse 2s infinite',
+        }} />
+        Live
+        <style>{`@keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }`}</style>
+      </span>
+    );
+  }
+  return (
+    <span style={{ fontSize: 12, color: '#9ca3af', display: 'flex', alignItems: 'center', gap: 4 }}>
+      <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#9ca3af', display: 'inline-block' }} />
+      Connecting…
+    </span>
   );
 }
 

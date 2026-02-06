@@ -6,8 +6,14 @@ import java.time.OffsetDateTime;
 import java.util.Objects;
 import java.util.UUID;
 
+/**
+ * Records a filled market order (instant spot trade).
+ */
 @Entity
-@Table(name = "trade")
+@Table(name = "trade", indexes = {
+    @Index(name = "idx_trade_user_created", columnList = "user_id, created_at DESC"),
+    @Index(name = "idx_trade_pair_created", columnList = "pair_id, created_at DESC")
+})
 public class Trade {
 
     @Id
@@ -15,124 +21,74 @@ public class Trade {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "market_id", nullable = false)
-    private Market market;
+    @JoinColumn(name = "user_id", nullable = false)
+    private UserAccount user;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "maker_order_id", nullable = false)
-    private Order makerOrder;
+    @JoinColumn(name = "pair_id", nullable = false)
+    private Market pair;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "taker_order_id", nullable = false)
-    private Order takerOrder;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 4)
+    private OrderSide side;
 
     @Column(nullable = false, precision = 38, scale = 18)
     private BigDecimal price;
 
-    @Column(nullable = false, precision = 38, scale = 18)
-    private BigDecimal amount;
+    @Column(name = "base_qty", nullable = false, precision = 38, scale = 18)
+    private BigDecimal baseQty;
 
-    @Column(name = "quote_amount", nullable = false, precision = 38, scale = 18)
-    private BigDecimal quoteAmount;
+    @Column(name = "quote_qty", nullable = false, precision = 38, scale = 18)
+    private BigDecimal quoteQty;
 
-    @Column(name = "executed_at", nullable = false)
-    private OffsetDateTime executedAt;
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private OffsetDateTime createdAt;
 
     @PrePersist
     protected void onCreate() {
-        if (executedAt == null) {
-            executedAt = OffsetDateTime.now();
+        if (createdAt == null) {
+            createdAt = OffsetDateTime.now();
         }
     }
 
     // Constructors
-    public Trade() {
-    }
+    public Trade() {}
 
-    public Trade(Market market, Order makerOrder, Order takerOrder, BigDecimal price, BigDecimal amount) {
-        this.market = market;
-        this.makerOrder = makerOrder;
-        this.takerOrder = takerOrder;
+    public Trade(UserAccount user, Market pair, OrderSide side,
+                 BigDecimal price, BigDecimal baseQty, BigDecimal quoteQty) {
+        this.user = user;
+        this.pair = pair;
+        this.side = side;
         this.price = price;
-        this.amount = amount;
-        this.quoteAmount = price.multiply(amount);
-    }
-
-    public Trade(Market market, Order makerOrder, Order takerOrder, BigDecimal price, BigDecimal amount, BigDecimal quoteAmount) {
-        this.market = market;
-        this.makerOrder = makerOrder;
-        this.takerOrder = takerOrder;
-        this.price = price;
-        this.amount = amount;
-        this.quoteAmount = quoteAmount;
+        this.baseQty = baseQty;
+        this.quoteQty = quoteQty;
     }
 
     // Getters and Setters
-    public UUID getId() {
-        return id;
-    }
+    public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
 
-    public void setId(UUID id) {
-        this.id = id;
-    }
+    public UserAccount getUser() { return user; }
+    public void setUser(UserAccount user) { this.user = user; }
 
-    public Market getMarket() {
-        return market;
-    }
+    public Market getPair() { return pair; }
+    public void setPair(Market pair) { this.pair = pair; }
 
-    public void setMarket(Market market) {
-        this.market = market;
-    }
+    public OrderSide getSide() { return side; }
+    public void setSide(OrderSide side) { this.side = side; }
 
-    public Order getMakerOrder() {
-        return makerOrder;
-    }
+    public BigDecimal getPrice() { return price; }
+    public void setPrice(BigDecimal price) { this.price = price; }
 
-    public void setMakerOrder(Order makerOrder) {
-        this.makerOrder = makerOrder;
-    }
+    public BigDecimal getBaseQty() { return baseQty; }
+    public void setBaseQty(BigDecimal baseQty) { this.baseQty = baseQty; }
 
-    public Order getTakerOrder() {
-        return takerOrder;
-    }
+    public BigDecimal getQuoteQty() { return quoteQty; }
+    public void setQuoteQty(BigDecimal quoteQty) { this.quoteQty = quoteQty; }
 
-    public void setTakerOrder(Order takerOrder) {
-        this.takerOrder = takerOrder;
-    }
+    public OffsetDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
 
-    public BigDecimal getPrice() {
-        return price;
-    }
-
-    public void setPrice(BigDecimal price) {
-        this.price = price;
-    }
-
-    public BigDecimal getAmount() {
-        return amount;
-    }
-
-    public void setAmount(BigDecimal amount) {
-        this.amount = amount;
-    }
-
-    public BigDecimal getQuoteAmount() {
-        return quoteAmount;
-    }
-
-    public void setQuoteAmount(BigDecimal quoteAmount) {
-        this.quoteAmount = quoteAmount;
-    }
-
-    public OffsetDateTime getExecutedAt() {
-        return executedAt;
-    }
-
-    public void setExecutedAt(OffsetDateTime executedAt) {
-        this.executedAt = executedAt;
-    }
-
-    // Equals and HashCode based on ID
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

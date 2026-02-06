@@ -50,6 +50,8 @@ public class SecurityConfig {
 				.requestMatchers("/api/system/health").permitAll()
 				// Allow public access to price endpoints (read-only market data)
 				.requestMatchers("/api/prices/**").permitAll()
+				// Allow public access to SSE price stream (read-only market data)
+				.requestMatchers("/api/stream/**").permitAll()
 				// Allow public access to Swagger UI and OpenAPI endpoints
 				.requestMatchers(
 					"/swagger-ui.html",

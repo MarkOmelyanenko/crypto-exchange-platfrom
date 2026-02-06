@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { list } from '../shared/api/services/assetsService';
+import { usePriceStream } from '../shared/hooks/usePriceStream';
 
 /* ──────────────────── helpers ──────────────────── */
 
@@ -48,6 +49,13 @@ function AssetsPage() {
   const [page, setPage] = useState(0);
   const pageSize = 20;
   const debounceRef = useRef(null);
+
+  // Live price stream: subscribe to symbols on the current page
+  const symbols = useMemo(
+    () => assets.filter(a => a.symbol !== 'USDT').map(a => a.symbol),
+    [assets]
+  );
+  const { prices: livePrices, connected: liveConnected, error: liveError } = usePriceStream(symbols);
 
   const fetchAssets = useCallback(async (params = {}) => {
     setLoading(true);
@@ -104,7 +112,10 @@ function AssetsPage() {
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 700, color: '#111827', margin: 0 }}>Assets</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h1 style={{ fontSize: 28, fontWeight: 700, color: '#111827', margin: 0 }}>Assets</h1>
+          <LiveIndicator connected={liveConnected} error={liveError} />
+        </div>
         <div style={{ position: 'relative' }}>
           <input
             type="text"
@@ -151,7 +162,13 @@ function AssetsPage() {
                 </tr>
               </thead>
               <tbody>
-                {assets.map((asset) => (
+                {assets.map((asset) => {
+                  const live = livePrices[asset.symbol];
+                  const price = live?.priceUsd ?? asset.priceUsd;
+                  const change = live?.change24hPercent ?? asset.change24hPercent;
+                  const unavailable = !live && asset.priceUnavailable;
+                  const ts = live?.ts ?? asset.updatedAt;
+                  return (
                   <tr
                     key={asset.id}
                     style={styles.tableRow}
@@ -166,25 +183,26 @@ function AssetsPage() {
                       {asset.name}
                     </td>
                     <td style={{ ...styles.td, textAlign: 'right', fontFamily: 'monospace' }}>
-                      {asset.priceUnavailable
+                      {unavailable
                         ? <span title="Price data temporarily unavailable" style={{ color: '#9ca3af' }}>—</span>
-                        : fmt(asset.priceUsd)
+                        : fmt(price)
                       }
                     </td>
                     <td style={{
                       ...styles.td, textAlign: 'right', fontWeight: 500,
-                      color: pctColor(asset.change24hPercent),
+                      color: pctColor(change),
                     }}>
-                      {asset.priceUnavailable
+                      {unavailable
                         ? <span title="Price data temporarily unavailable" style={{ color: '#9ca3af' }}>—</span>
-                        : fmtPct(asset.change24hPercent)
+                        : fmtPct(change)
                       }
                     </td>
                     <td style={{ ...styles.td, textAlign: 'right', color: '#9ca3af', fontSize: 13 }}>
-                      {fmtDate(asset.updatedAt)}
+                      {fmtDate(ts)}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -273,6 +291,35 @@ function Skeleton({ height = 40 }) {
     }}>
       <style>{`@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
     </div>
+  );
+}
+
+function LiveIndicator({ connected, error }) {
+  if (error) {
+    return (
+      <span style={{ fontSize: 12, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#f59e0b', display: 'inline-block' }} />
+        {error}
+      </span>
+    );
+  }
+  if (connected) {
+    return (
+      <span style={{ fontSize: 12, color: '#10b981', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <span style={{
+          width: 7, height: 7, borderRadius: '50%', backgroundColor: '#10b981',
+          display: 'inline-block', animation: 'livePulse 2s infinite',
+        }} />
+        Live
+        <style>{`@keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }`}</style>
+      </span>
+    );
+  }
+  return (
+    <span style={{ fontSize: 12, color: '#9ca3af', display: 'flex', alignItems: 'center', gap: 4 }}>
+      <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#9ca3af', display: 'inline-block' }} />
+      Connecting…
+    </span>
   );
 }
 
