@@ -359,8 +359,14 @@ function HoldingsTable({ holdings, loading, livePrices = {} }) {
     else { setSortBy(field); setSortAsc(false); }
   };
 
+  // Filter out holdings with zero or near-zero quantity
+  const filteredHoldings = holdings.filter((h) => {
+    const qty = Number(h.quantity) || 0;
+    return qty > 0.00000001; // Filter out zero or very small quantities
+  });
+
   // Enrich holdings with live prices — recalculate PnL with real-time data
-  const enriched = holdings.map((h) => {
+  const enriched = filteredHoldings.map((h) => {
     const live = livePrices[h.symbol];
     if (live && live.priceUsd != null) {
       const currentPrice = Number(live.priceUsd);
@@ -387,9 +393,9 @@ function HoldingsTable({ holdings, loading, livePrices = {} }) {
     return sortAsc ? av - bv : bv - av;
   });
 
-  if (loading && holdings.length === 0) return <Skeleton height={120} />;
+  if (loading && filteredHoldings.length === 0) return <Skeleton height={120} />;
 
-  if (holdings.length === 0) {
+  if (filteredHoldings.length === 0) {
     return (
       <EmptyState message="No holdings yet. Start trading to see your portfolio here.">
         <Link to="/assets" style={styles.primaryBtn}>Browse Assets</Link>

@@ -28,7 +28,9 @@ export function PortfolioPieChart({
   showLegendAsList = false 
 }) {
   const breakdown = useMemo(() => {
-    return computePortfolioBreakdown(balances, cashUsd, prices, assetNames, 1);
+    const result = computePortfolioBreakdown(balances, cashUsd, prices, assetNames, 1);
+    // Filter out "Other" category
+    return result.filter(item => item.name !== 'Other');
   }, [balances, cashUsd, prices, assetNames]);
 
   const totalUsdt = useMemo(() => {
