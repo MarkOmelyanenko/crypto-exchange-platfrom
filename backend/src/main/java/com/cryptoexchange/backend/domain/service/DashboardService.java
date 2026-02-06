@@ -351,7 +351,8 @@ public class DashboardService {
 
     /**
      * Get current prices for all assets.
-     * Priority: 1) Binance API (live), 2) PriceTick DB (Binance-fetched), 3) MarketTick DB
+     * Uses a single batch Binance API call (fetches ALL tickers at once, cached 5s)
+     * with fallback to PriceTick DB and MarketTick DB.
      */
     private Map<String, BigDecimal> getCurrentPrices() {
         Map<String, BigDecimal> prices = new HashMap<>();
@@ -363,17 +364,27 @@ public class DashboardService {
             symbols.add(market.getBaseAsset().getSymbol());
         }
 
-        // 1) Try Binance API for each symbol
-        for (String symbol : symbols) {
-            try {
+        // 1) Batch-fetch from Binance (single API call for ALL tickers, cached 5s)
+        try {
+            List<String> binanceSymbols = symbols.stream()
+                .map(binanceService::toBinanceSymbol)
+                .collect(Collectors.toList());
+            Map<String, BinanceService.BinanceTicker24h> tickers =
+                binanceService.getBatchTicker24h(binanceSymbols);
+
+            for (String symbol : symbols) {
                 String binanceSymbol = binanceService.toBinanceSymbol(symbol);
-                BigDecimal price = binanceService.getCurrentPrice(binanceSymbol);
-                if (price != null) {
-                    prices.put(symbol, price);
+                BinanceService.BinanceTicker24h ticker = tickers.get(binanceSymbol);
+                if (ticker != null && ticker.lastPrice != null) {
+                    try {
+                        prices.put(symbol, new BigDecimal(ticker.lastPrice));
+                    } catch (NumberFormatException e) {
+                        log.warn("Invalid price format from Binance for {}: {}", symbol, ticker.lastPrice);
+                    }
                 }
-            } catch (Exception e) {
-                log.warn("Failed to get Binance price for {}: {}", symbol, e.getMessage());
             }
+        } catch (Exception e) {
+            log.warn("Failed to batch-fetch prices from Binance: {}", e.getMessage());
         }
 
         // 2) Fallback to PriceTick DB (Binance-fetched ticks stored by scheduled job)
