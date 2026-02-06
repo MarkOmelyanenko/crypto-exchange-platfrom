@@ -4,6 +4,7 @@ import { getBySymbol, getMyPosition } from '../shared/api/services/assetsService
 import { getHistory } from '../shared/api/services/priceService';
 import { create as createTransaction } from '../shared/api/services/transactionsService';
 import { usePriceStream } from '../shared/hooks/usePriceStream';
+import CryptoIcon from '../shared/components/CryptoIcon';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
@@ -146,6 +147,7 @@ function AssetDetailPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                <CryptoIcon symbol={asset.symbol} size={32} />
                 <h1 style={{ fontSize: 28, fontWeight: 700, color: '#111827', margin: 0 }}>{asset.symbol}</h1>
                 <span style={{ fontSize: 16, color: '#6b7280', fontWeight: 400 }}>{asset.name}</span>
                 <LiveIndicator connected={liveConnected} error={liveError} />

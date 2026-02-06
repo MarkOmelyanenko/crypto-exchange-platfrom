@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { list } from '../shared/api/services/assetsService';
 import { usePriceStream } from '../shared/hooks/usePriceStream';
+import CryptoIcon from '../shared/components/CryptoIcon';
 
 /* ──────────────────── helpers ──────────────────── */
 
@@ -176,7 +177,10 @@ function AssetsPage() {
                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = ''}
                   >
                     <td style={{ ...styles.td, textAlign: 'left', fontWeight: 600, color: '#111827' }}>
-                      {asset.symbol}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <CryptoIcon symbol={asset.symbol} size={24} />
+                        {asset.symbol}
+                      </div>
                     </td>
                     <td style={{ ...styles.td, textAlign: 'left', color: '#6b7280' }}>
                       {asset.name}

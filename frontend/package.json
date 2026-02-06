@@ -10,7 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@web3icons/react": "^4.1.17",
     "axios": "^1.13.4",
+    "cryptocurrency-icons": "^0.18.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^6.28.0",

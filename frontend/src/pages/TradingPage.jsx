@@ -4,6 +4,7 @@ import { getPairs, getPrice, getPairHistory } from '../shared/api/services/marke
 import { placeMarketOrder, listTrades } from '../shared/api/services/orderService';
 import { getWalletBalances } from '../shared/api/services/walletService';
 import { usePriceStream } from '../shared/hooks/usePriceStream';
+import CryptoIcon from '../shared/components/CryptoIcon';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
@@ -318,21 +319,24 @@ function TradingPage() {
               {loadingPairs ? (
                 <Skeleton height={42} />
               ) : (
-                <select
-                  value={selectedPairId || ''}
-                  onChange={handlePairChange}
-                  style={styles.pairSelect}
-                >
-                  {Object.entries(groupedPairs).map(([quote, group]) => (
-                    <optgroup key={quote} label={`── ${quote} pairs ──`}>
-                      {group.map(p => (
-                        <option key={p.id} value={p.id}>
-                          {p.base}/{p.quote}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
+                <>
+                  {baseSymbol && <CryptoIcon symbol={baseSymbol} size={28} />}
+                  <select
+                    value={selectedPairId || ''}
+                    onChange={handlePairChange}
+                    style={styles.pairSelect}
+                  >
+                    {Object.entries(groupedPairs).map(([quote, group]) => (
+                      <optgroup key={quote} label={`── ${quote} pairs ──`}>
+                        {group.map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.base}/{p.quote}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </>
               )}
               <LiveIndicator connected={liveStatus.connected} error={liveStatus.error} />
             </div>
@@ -579,6 +583,7 @@ function TradingPage() {
                           }}>
                             {t.side}
                           </span>
+                          <CryptoIcon symbol={t.pairSymbol?.split('/')[0] || t.baseAsset} size={18} />
                           <span style={{ marginLeft: 8, fontWeight: 600, fontSize: 13 }}>
                             {t.pairSymbol}
                           </span>

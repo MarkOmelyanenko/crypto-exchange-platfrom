@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { list, getById } from '../shared/api/services/transactionsService';
+import CryptoIcon from '../shared/components/CryptoIcon';
 
 /* ──────────────────── helpers ──────────────────── */
 
@@ -188,12 +189,15 @@ function TransactionsPage() {
                       {fmtDate(tx.createdAt)}
                     </td>
                     <td style={{ ...styles.td, textAlign: 'left', fontWeight: 600 }}>
-                      {tx.pairSymbol || tx.symbol}
-                      {tx.source === 'TRADE' && (
-                        <span style={{ marginLeft: 6, fontSize: 10, color: '#9ca3af', fontWeight: 400 }}>
-                          SPOT
-                        </span>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <CryptoIcon symbol={tx.pairSymbol || tx.symbol} size={20} />
+                        {tx.pairSymbol || tx.symbol}
+                        {tx.source === 'TRADE' && (
+                          <span style={{ marginLeft: 6, fontSize: 10, color: '#9ca3af', fontWeight: 400 }}>
+                            SPOT
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td style={{ ...styles.td, textAlign: 'center' }}>
                       <SideBadge side={tx.side} />

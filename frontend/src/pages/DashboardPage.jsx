@@ -6,6 +6,7 @@ import { getHealth } from '../shared/api/services/systemService';
 import { getWalletBalances, getCashBalance } from '../shared/api/services/walletService';
 import { usePriceStream } from '../shared/hooks/usePriceStream';
 import { PortfolioPieChart } from '../shared/components/PortfolioPieChart';
+import CryptoIcon from '../shared/components/CryptoIcon';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
@@ -419,8 +420,13 @@ function HoldingsTable({ holdings, loading, livePrices = {} }) {
           {sorted.map((h) => (
             <tr key={h.assetId} style={styles.tableRow}>
               <td style={{ ...styles.td, textAlign: 'left' }}>
-                <span style={{ fontWeight: 600 }}>{h.symbol}</span>
-                <span style={{ fontSize: 12, color: '#6b7280', marginLeft: 6 }}>{h.name}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <CryptoIcon symbol={h.symbol} size={24} />
+                  <div>
+                    <span style={{ fontWeight: 600 }}>{h.symbol}</span>
+                    <span style={{ fontSize: 12, color: '#6b7280', marginLeft: 6 }}>{h.name}</span>
+                  </div>
+                </div>
               </td>
               <td style={{ ...styles.td, textAlign: 'right', fontFamily: 'monospace' }}>{fmtQty(h.quantity)}</td>
               <td style={{ ...styles.td, textAlign: 'right' }}>{fmt(h.avgBuyPriceUsd)}</td>
@@ -477,6 +483,7 @@ function TransactionsList({ transactions, loading }) {
               }}>
                 {tx.type}
               </span>
+              <CryptoIcon symbol={tx.symbol} size={20} />
               <span style={{ fontWeight: 600, fontSize: 14 }}>{tx.symbol}</span>
               <StatusBadge status={tx.status} />
             </div>

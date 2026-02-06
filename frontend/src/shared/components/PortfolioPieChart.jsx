@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { computePortfolioBreakdown, formatUsdtValue, formatPercentage } from '../utils/portfolioUtils';
 import { LastUpdatedIndicator } from './LastUpdatedIndicator';
+import CryptoIcon from './CryptoIcon';
 
 /**
  * Portfolio allocation pie/donut chart component with custom legend.
@@ -134,19 +135,10 @@ export function PortfolioPieChart({
               e.currentTarget.style.backgroundColor = index % 2 === 0 ? '#fafafa' : 'transparent';
             }}
           >
-            {/* Colored dot icon */}
-            <div
-              style={{
-                width: 18,
-                height: 18,
-                backgroundColor: item.color,
-                borderRadius: '50%',
-                flexShrink: 0,
-                marginTop: 2,
-                boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
-                border: '2px solid #fff',
-              }}
-            />
+            {/* Crypto icon */}
+            <div style={{ flexShrink: 0, marginTop: 2 }}>
+              <CryptoIcon symbol={item.name} size={20} />
+            </div>
             
             {/* Content */}
               <div style={{ flex: 1, minWidth: 0 }}>
