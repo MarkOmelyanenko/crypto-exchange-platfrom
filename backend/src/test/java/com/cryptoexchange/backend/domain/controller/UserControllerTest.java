@@ -1,5 +1,6 @@
 package com.cryptoexchange.backend.domain.controller;
 
+import com.cryptoexchange.backend.config.JacksonConfig;
 import com.cryptoexchange.backend.config.JwtService;
 import com.cryptoexchange.backend.config.RateLimitProperties;
 import com.cryptoexchange.backend.config.RateLimitService;
@@ -9,6 +10,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -26,6 +28,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(UserController.class)
+@Import(JacksonConfig.class)
 class UserControllerTest {
 
     @Autowired
