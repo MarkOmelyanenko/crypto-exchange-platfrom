@@ -44,50 +44,50 @@ function App() {
 
   return (
     <div className="app-container">
-      <header className="app-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1>Crypto Exchange Simulator</h1>
+      <header className="app-header">
+        <div className="header-left">
+          <h1 className="header-logo">Crypto Exchange Simulator</h1>
+          {!isAuthPage && isAuthenticated && (
+            <nav className="header-nav">
+              <NavLink to="/dashboard" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+                Dashboard
+              </NavLink>
+              <NavLink to="/wallet" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+                Wallet
+              </NavLink>
+              <NavLink to="/assets" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+                Assets
+              </NavLink>
+              <NavLink to="/deposit" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+                Deposit USDT
+              </NavLink>
+              <NavLink to="/trade" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+                Trade
+              </NavLink>
+              <NavLink to="/transactions" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+                Transactions
+              </NavLink>
+            </nav>
+          )}
+        </div>
         {isAuthenticated && user && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <div className="header-right">
             {/* Cash Balance Badge */}
-            <div style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center',
-              backgroundColor: 'rgba(255,255,255,0.1)', padding: '6px 14px', borderRadius: 6,
-            }}>
-              <span style={{ fontSize: 11, color: '#9ca3af', letterSpacing: '0.03em' }}>USDT Balance</span>
-              <span style={{ fontSize: 16, fontWeight: 700, color: '#10b981' }}>
+            <div className="balance-badge">
+              <span className="balance-label">USDT Balance</span>
+              <span className="balance-value">
                 {fmtUsdt(cashBalance?.cashUsd)}
               </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                <span style={{ fontSize: '14px', fontWeight: 'bold' }}>{user.login || user.email}</span>
-                <span style={{ fontSize: '12px', color: '#666' }}>{user.email}</span>
+            <div className="user-info">
+              <div className="user-details">
+                <span className="user-name">{user.login || user.email}</span>
+                <span className="user-email">{user.email}</span>
               </div>
               <Link
                 to="/account"
                 title="Account Settings"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '50%',
-                  backgroundColor: 'rgba(255,255,255,0.1)',
-                  color: '#fff',
-                  textDecoration: 'none',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  border: '1px solid rgba(255,255,255,0.2)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)';
-                  e.currentTarget.style.transform = 'scale(1.1)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)';
-                  e.currentTarget.style.transform = 'scale(1)';
-                }}
+                className="account-link"
               >
                 <svg
                   width="18"
@@ -98,7 +98,6 @@ function App() {
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  style={{ display: 'block' }}
                 >
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                   <circle cx="12" cy="7" r="4"></circle>
@@ -107,15 +106,7 @@ function App() {
             </div>
             <button
               onClick={logout}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: '#dc3545',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '14px'
-              }}
+              className="logout-btn"
             >
               Logout
             </button>
@@ -123,39 +114,17 @@ function App() {
         )}
       </header>
       {!isAuthPage && (
-      <div className="app-body">
-        <aside className="app-sidebar">
-          <nav className="sidebar-nav">
-            <NavLink to="/dashboard" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
-              Dashboard
-            </NavLink>
-            <NavLink to="/wallet" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
-              Wallet
-            </NavLink>
-            <NavLink to="/assets" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
-              Assets
-            </NavLink>
-            <NavLink to="/deposit" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
-              Deposit USDT
-            </NavLink>
-            <NavLink to="/trade" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
-              Trade
-            </NavLink>
-            <NavLink to="/transactions" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
-              Transactions
-            </NavLink>
-          </nav>
-        </aside>
-        <div className="app-main-wrapper">
-          <main className="app-main">
-            <Outlet context={{ cashBalance, refreshCashBalance: loadCashBalance }} />
-          </main>
-          <Footer />
+        <div className="app-body">
+          <div className="app-main-wrapper">
+            <main className="app-main">
+              <Outlet context={{ cashBalance, refreshCashBalance: loadCashBalance }} />
+            </main>
+            <Footer />
+          </div>
         </div>
-      </div>
       )}
       {isAuthPage && (
-        <main style={{ minHeight: 'calc(100vh - 80px)' }}>
+        <main className="auth-main">
           <Outlet />
         </main>
       )}

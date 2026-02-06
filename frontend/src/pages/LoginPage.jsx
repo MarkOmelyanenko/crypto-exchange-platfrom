@@ -59,41 +59,41 @@ function LoginPage() {
   };
 
   return (
-    <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px' }}>
-      <h1>Login</h1>
+    <div className="form-container">
+      <h1 style={{ marginBottom: '1.5rem', textAlign: 'center', color: 'var(--text-primary)' }}>Login</h1>
       <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', marginBottom: '5px' }}>
+        <div className="form-group">
+          <label className="form-label">
             Login or Email:
           </label>
-            <input
+          <input
             type="text"
             value={loginOrEmail}
             onChange={(e) => setLoginOrEmail(e.target.value)}
-              required
-              disabled={loading}
-            style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
-            />
-          {errors.loginOrEmail && <div style={{ color: 'red', fontSize: '12px', marginTop: '5px' }}>{errors.loginOrEmail}</div>}
+            required
+            disabled={loading}
+            className={`form-input ${errors.loginOrEmail ? 'error' : ''}`}
+          />
+          {errors.loginOrEmail && <div className="error-message">{errors.loginOrEmail}</div>}
         </div>
         
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', marginBottom: '5px' }}>
+        <div className="form-group">
+          <label className="form-label">
             Password:
           </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              disabled={loading}
-            style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
-            />
-          {errors.password && <div style={{ color: 'red', fontSize: '12px', marginTop: '5px' }}>{errors.password}</div>}
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            disabled={loading}
+            className={`form-input ${errors.password ? 'error' : ''}`}
+          />
+          {errors.password && <div className="error-message">{errors.password}</div>}
         </div>
         
         {error && (
-          <div style={{ color: 'red', marginBottom: '15px', padding: '10px', backgroundColor: '#ffe6e6', borderRadius: '4px' }}>
+          <div className="error-banner">
             {error}
           </div>
         )}
@@ -101,23 +101,14 @@ function LoginPage() {
         <button 
           type="submit" 
           disabled={loading}
-          style={{ 
-            width: '100%', 
-            padding: '10px', 
-            backgroundColor: '#007bff', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: '4px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.6 : 1
-          }}
+          className="btn btn-primary"
         >
           {loading ? 'Logging in...' : 'Login'}
         </button>
       </form>
       
-      <div style={{ marginTop: '15px', textAlign: 'center' }}>
-        <Link to="/register" style={{ color: '#007bff', textDecoration: 'none' }}>
+      <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+        <Link to="/register" className="form-link">
           Don't have an account? Register
         </Link>
       </div>

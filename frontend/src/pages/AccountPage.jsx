@@ -49,6 +49,17 @@ function AccountPage() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const validatePasswordStrength = (pwd) => {
+    const requirements = {
+      minLength: pwd.length >= 8,
+      hasNumber: /\d/.test(pwd),
+      hasSpecialChar: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd),
+    };
+    return requirements;
+  };
+
+  const newPasswordRequirements = validatePasswordStrength(newPassword);
+
   const validatePassword = () => {
     const newErrors = {};
     
@@ -58,8 +69,15 @@ function AccountPage() {
     
     if (!newPassword) {
       newErrors.newPassword = 'New password is required';
-    } else if (newPassword.length < 8) {
-      newErrors.newPassword = 'New password must be at least 8 characters';
+    } else {
+      const reqs = validatePasswordStrength(newPassword);
+      if (!reqs.minLength) {
+        newErrors.newPassword = 'New password must be at least 8 characters';
+      } else if (!reqs.hasNumber) {
+        newErrors.newPassword = 'New password must contain at least one number';
+      } else if (!reqs.hasSpecialChar) {
+        newErrors.newPassword = 'New password must contain at least one special character';
+      }
     }
     
     if (!confirmPassword) {
@@ -149,15 +167,15 @@ function AccountPage() {
   };
 
   return (
-    <div style={{ maxWidth: '600px', margin: '50px auto', padding: '20px' }}>
-      <h1>Account Settings</h1>
+    <div style={{ maxWidth: '700px', margin: '2rem auto', padding: '0 1rem' }}>
+      <h1 style={{ marginBottom: '2rem', color: 'var(--text-primary)' }}>Account Settings</h1>
 
       {/* Profile Section */}
-      <div style={{ marginBottom: '40px', padding: '20px', border: '1px solid #ddd', borderRadius: '8px' }}>
-        <h2 style={{ marginTop: 0 }}>Profile Information</h2>
+      <div style={{ marginBottom: '2.5rem', padding: '1.5rem', border: '2px solid var(--border-color)', borderRadius: '1rem', backgroundColor: 'var(--bg-primary)', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)' }}>
+        <h2 style={{ marginTop: 0, marginBottom: '1.5rem', color: 'var(--text-primary)' }}>Profile Information</h2>
         <form onSubmit={handleProfileSubmit}>
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+          <div className="form-group">
+            <label className="form-label">
               Login:
             </label>
             <input
@@ -166,17 +184,17 @@ function AccountPage() {
               onChange={(e) => setLogin(e.target.value)}
               required
               disabled={profileLoading}
-              style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
+              className={`form-input ${profileErrors.login ? 'error' : ''}`}
             />
             {profileErrors.login && (
-              <div style={{ color: 'red', fontSize: '12px', marginTop: '5px' }}>
+              <div className="error-message">
                 {profileErrors.login}
               </div>
             )}
           </div>
 
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+          <div className="form-group">
+            <label className="form-label">
               Email:
             </label>
             <input
@@ -185,23 +203,23 @@ function AccountPage() {
               onChange={(e) => setEmail(e.target.value)}
               required
               disabled={profileLoading}
-              style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
+              className={`form-input ${profileErrors.email ? 'error' : ''}`}
             />
             {profileErrors.email && (
-              <div style={{ color: 'red', fontSize: '12px', marginTop: '5px' }}>
+              <div className="error-message">
                 {profileErrors.email}
               </div>
             )}
           </div>
 
           {profileError && (
-            <div style={{ color: 'red', marginBottom: '15px', padding: '10px', backgroundColor: '#ffe6e6', borderRadius: '4px' }}>
+            <div className="error-banner">
               {profileError}
             </div>
           )}
 
           {profileSuccess && (
-            <div style={{ color: 'green', marginBottom: '15px', padding: '10px', backgroundColor: '#e6ffe6', borderRadius: '4px' }}>
+            <div className="success-message">
               {profileSuccess}
             </div>
           )}
@@ -209,15 +227,8 @@ function AccountPage() {
           <button
             type="submit"
             disabled={profileLoading}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#007bff',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: profileLoading ? 'not-allowed' : 'pointer',
-              opacity: profileLoading ? 0.6 : 1
-            }}
+            className="btn btn-primary"
+            style={{ width: 'auto', padding: '0.75rem 2rem' }}
           >
             {profileLoading ? 'Saving...' : 'Save Changes'}
           </button>
@@ -225,11 +236,11 @@ function AccountPage() {
       </div>
 
       {/* Password Section */}
-      <div style={{ padding: '20px', border: '1px solid #ddd', borderRadius: '8px' }}>
-        <h2 style={{ marginTop: 0 }}>Change Password</h2>
+      <div style={{ padding: '1.5rem', border: '2px solid var(--border-color)', borderRadius: '1rem', backgroundColor: 'var(--bg-primary)', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)' }}>
+        <h2 style={{ marginTop: 0, marginBottom: '1.5rem', color: 'var(--text-primary)' }}>Change Password</h2>
         <form onSubmit={handlePasswordSubmit}>
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+          <div className="form-group">
+            <label className="form-label">
               Current Password:
             </label>
             <input
@@ -238,17 +249,17 @@ function AccountPage() {
               onChange={(e) => setCurrentPassword(e.target.value)}
               required
               disabled={passwordLoading}
-              style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
+              className={`form-input ${passwordErrors.currentPassword ? 'error' : ''}`}
             />
             {passwordErrors.currentPassword && (
-              <div style={{ color: 'red', fontSize: '12px', marginTop: '5px' }}>
+              <div className="error-message">
                 {passwordErrors.currentPassword}
               </div>
             )}
           </div>
 
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+          <div className="form-group">
+            <label className="form-label">
               New Password:
             </label>
             <input
@@ -257,17 +268,31 @@ function AccountPage() {
               onChange={(e) => setNewPassword(e.target.value)}
               required
               disabled={passwordLoading}
-              style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
+              className={`form-input ${passwordErrors.newPassword ? 'error' : ''}`}
             />
             {passwordErrors.newPassword && (
-              <div style={{ color: 'red', fontSize: '12px', marginTop: '5px' }}>
+              <div className="error-message">
                 {passwordErrors.newPassword}
+              </div>
+            )}
+            {newPassword && (
+              <div className="password-requirements">
+                <div className="password-requirements-title">Password Requirements:</div>
+                <div className={`password-requirement ${newPasswordRequirements.minLength ? 'valid' : 'invalid'}`}>
+                  At least 8 characters
+                </div>
+                <div className={`password-requirement ${newPasswordRequirements.hasNumber ? 'valid' : 'invalid'}`}>
+                  At least one number
+                </div>
+                <div className={`password-requirement ${newPasswordRequirements.hasSpecialChar ? 'valid' : 'invalid'}`}>
+                  At least one special character (!@#$%^&*...)
+                </div>
               </div>
             )}
           </div>
 
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+          <div className="form-group">
+            <label className="form-label">
               Confirm New Password:
             </label>
             <input
@@ -276,23 +301,28 @@ function AccountPage() {
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
               disabled={passwordLoading}
-              style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
+              className={`form-input ${passwordErrors.confirmPassword ? 'error' : ''}`}
             />
             {passwordErrors.confirmPassword && (
-              <div style={{ color: 'red', fontSize: '12px', marginTop: '5px' }}>
+              <div className="error-message">
                 {passwordErrors.confirmPassword}
+              </div>
+            )}
+            {confirmPassword && newPassword && confirmPassword === newPassword && (
+              <div className="success-message" style={{ marginTop: '0.5rem', padding: '0.5rem' }}>
+                Passwords match
               </div>
             )}
           </div>
 
           {passwordError && (
-            <div style={{ color: 'red', marginBottom: '15px', padding: '10px', backgroundColor: '#ffe6e6', borderRadius: '4px' }}>
+            <div className="error-banner">
               {passwordError}
             </div>
           )}
 
           {passwordSuccess && (
-            <div style={{ color: 'green', marginBottom: '15px', padding: '10px', backgroundColor: '#e6ffe6', borderRadius: '4px' }}>
+            <div className="success-message" style={{ margin: '15px 15px 15px 0'}}>
               {passwordSuccess}
             </div>
           )}
@@ -300,15 +330,8 @@ function AccountPage() {
           <button
             type="submit"
             disabled={passwordLoading}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#28a745',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: passwordLoading ? 'not-allowed' : 'pointer',
-              opacity: passwordLoading ? 0.6 : 1
-            }}
+            className="btn btn-success"
+            style={{ width: 'auto', padding: '0.75rem 2rem' }}
           >
             {passwordLoading ? 'Changing...' : 'Change Password'}
           </button>

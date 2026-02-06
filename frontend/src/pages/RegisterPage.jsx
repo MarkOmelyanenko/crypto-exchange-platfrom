@@ -19,6 +19,17 @@ function RegisterPage() {
     }
   }, [isAuthenticated, user, navigate]);
 
+  const validatePassword = (pwd) => {
+    const requirements = {
+      minLength: pwd.length >= 8,
+      hasNumber: /\d/.test(pwd),
+      hasSpecialChar: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd),
+    };
+    return requirements;
+  };
+
+  const passwordRequirements = validatePassword(password);
+
   const validate = () => {
     const newErrors = {};
     
@@ -38,8 +49,15 @@ function RegisterPage() {
     
     if (!password) {
       newErrors.password = 'Password is required';
-    } else if (password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
+    } else {
+      const reqs = validatePassword(password);
+      if (!reqs.minLength) {
+        newErrors.password = 'Password must be at least 8 characters';
+      } else if (!reqs.hasNumber) {
+        newErrors.password = 'Password must contain at least one number';
+      } else if (!reqs.hasSpecialChar) {
+        newErrors.password = 'Password must contain at least one special character';
+      }
     }
     
     setErrors(newErrors);
@@ -76,11 +94,11 @@ function RegisterPage() {
   };
 
   return (
-    <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px' }}>
-      <h1>Register</h1>
+    <div className="form-container">
+      <h1 style={{ marginBottom: '1.5rem', textAlign: 'center', color: 'var(--text-primary)' }}>Register</h1>
       <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', marginBottom: '5px' }}>
+        <div className="form-group">
+          <label className="form-label">
             Login:
           </label>
           <input
@@ -89,43 +107,57 @@ function RegisterPage() {
             onChange={(e) => setLogin(e.target.value)}
             required
             disabled={loading}
-            style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
+            className={`form-input ${errors.login ? 'error' : ''}`}
           />
-          {errors.login && <div style={{ color: 'red', fontSize: '12px', marginTop: '5px' }}>{errors.login}</div>}
+          {errors.login && <div className="error-message">{errors.login}</div>}
         </div>
         
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', marginBottom: '5px' }}>
+        <div className="form-group">
+          <label className="form-label">
             Email:
           </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              disabled={loading}
-            style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
-            />
-          {errors.email && <div style={{ color: 'red', fontSize: '12px', marginTop: '5px' }}>{errors.email}</div>}
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            disabled={loading}
+            className={`form-input ${errors.email ? 'error' : ''}`}
+          />
+          {errors.email && <div className="error-message">{errors.email}</div>}
         </div>
         
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', marginBottom: '5px' }}>
+        <div className="form-group">
+          <label className="form-label">
             Password:
           </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              disabled={loading}
-            style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
-            />
-          {errors.password && <div style={{ color: 'red', fontSize: '12px', marginTop: '5px' }}>{errors.password}</div>}
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            disabled={loading}
+            className={`form-input ${errors.password ? 'error' : ''}`}
+          />
+          {errors.password && <div className="error-message">{errors.password}</div>}
+          {password && (
+            <div className="password-requirements">
+              <div className="password-requirements-title">Password Requirements:</div>
+              <div className={`password-requirement ${passwordRequirements.minLength ? 'valid' : 'invalid'}`}>
+                At least 8 characters
+              </div>
+              <div className={`password-requirement ${passwordRequirements.hasNumber ? 'valid' : 'invalid'}`}>
+                At least one number
+              </div>
+              <div className={`password-requirement ${passwordRequirements.hasSpecialChar ? 'valid' : 'invalid'}`}>
+                At least one special character (!@#$%^&*...)
+              </div>
+            </div>
+          )}
         </div>
         
         {error && (
-          <div style={{ color: 'red', marginBottom: '15px', padding: '10px', backgroundColor: '#ffe6e6', borderRadius: '4px' }}>
+          <div className="error-banner">
             {error}
           </div>
         )}
@@ -133,23 +165,14 @@ function RegisterPage() {
         <button 
           type="submit" 
           disabled={loading}
-          style={{ 
-            width: '100%', 
-            padding: '10px', 
-            backgroundColor: '#007bff', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: '4px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.6 : 1
-          }}
+          className="btn btn-primary"
         >
           {loading ? 'Registering...' : 'Register'}
         </button>
       </form>
       
-      <div style={{ marginTop: '15px', textAlign: 'center' }}>
-        <Link to="/login" style={{ color: '#007bff', textDecoration: 'none' }}>
+      <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+        <Link to="/login" className="form-link">
           Already have an account? Login
         </Link>
       </div>
