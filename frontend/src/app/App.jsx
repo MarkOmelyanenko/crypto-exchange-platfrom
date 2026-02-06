@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Outlet, NavLink, useLocation, Link } from 'react-router-dom';
+import { Outlet, NavLink, useLocation, Link, useParams } from 'react-router-dom';
 import { useAuth } from '../shared/context/AuthContext';
 import { getCashBalance } from '../shared/api/services/walletService';
 import Footer from '../shared/components/Footer';
@@ -8,6 +8,7 @@ import '../index.css';
 function App() {
   const { user, logout, isAuthenticated } = useAuth();
   const location = useLocation();
+  const params = useParams();
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
   const [cashBalance, setCashBalance] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -41,6 +42,36 @@ function App() {
     setMobileMenuOpen(false);
   }, [location.pathname]);
 
+  // Update document title based on current route
+  useEffect(() => {
+    const baseTitle = 'Crypto Exchange';
+    let pageTitle = baseTitle;
+
+    if (location.pathname === '/login') {
+      pageTitle = 'Login - ' + baseTitle;
+    } else if (location.pathname === '/register') {
+      pageTitle = 'Register - ' + baseTitle;
+    } else if (location.pathname === '/dashboard') {
+      pageTitle = 'Dashboard - ' + baseTitle;
+    } else if (location.pathname === '/assets') {
+      pageTitle = 'Assets - ' + baseTitle;
+    } else if (location.pathname.startsWith('/assets/') && params.symbol) {
+      pageTitle = `${params.symbol.toUpperCase()} - Assets - ${baseTitle}`;
+    } else if (location.pathname === '/transactions') {
+      pageTitle = 'Transactions - ' + baseTitle;
+    } else if (location.pathname === '/wallet') {
+      pageTitle = 'Wallet - ' + baseTitle;
+    } else if (location.pathname === '/deposit') {
+      pageTitle = 'Deposit USDT - ' + baseTitle;
+    } else if (location.pathname === '/trade') {
+      pageTitle = 'Trade - ' + baseTitle;
+    } else if (location.pathname === '/account') {
+      pageTitle = 'Account - ' + baseTitle;
+    }
+
+    document.title = pageTitle;
+  }, [location.pathname, params.symbol]);
+
   const fmtUsdt = (v) => {
     if (v == null || isNaN(Number(v))) return '...';
     return new Intl.NumberFormat('en-US', {
@@ -53,7 +84,10 @@ function App() {
       <header className="app-header">
         <div className="header-left">
           <div className="header-top">
-            <h1 className="header-logo">Crypto Exchange Simulator</h1>
+            <Link to="/dashboard" className="header-logo">
+              <img src="/logo.png" alt="Logo" className="logo-image" />
+              <span className="logo-text">Crypto Exchange Simulator</span>
+            </Link>
             {!isAuthPage && isAuthenticated && (
               <button
                 className="mobile-menu-toggle"
