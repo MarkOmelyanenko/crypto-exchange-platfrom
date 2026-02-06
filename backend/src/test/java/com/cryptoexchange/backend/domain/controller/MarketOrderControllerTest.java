@@ -69,7 +69,7 @@ class MarketOrderControllerTest {
         UserAccount user = new UserAccount("test", "test@test.com", "pwd");
         user.setId(USER_ID);
 
-        Market pair = new Market(btc, usdt, "BTCUSDT");
+        Market pair = new Market(btc, usdt, "BTC/USDT");
         pair.setId(PAIR_ID);
         pair.setActive(true);
 
@@ -97,7 +97,7 @@ class MarketOrderControllerTest {
                         .content(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.side").value("BUY"))
-                .andExpect(jsonPath("$.pairSymbol").value("BTCUSDT"))
+                .andExpect(jsonPath("$.pairSymbol").value("BTC/USDT"))
                 .andExpect(jsonPath("$.baseAsset").value("BTC"))
                 .andExpect(jsonPath("$.quoteAsset").value("USDT"));
     }

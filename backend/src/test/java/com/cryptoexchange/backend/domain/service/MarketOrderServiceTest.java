@@ -26,7 +26,7 @@ import static org.mockito.Mockito.*;
 class MarketOrderServiceTest {
 
     @Mock private MarketService marketService;
-    @Mock private BinanceService binanceService;
+    @Mock private WhiteBitService whiteBitService;
     @Mock private UserService userService;
     @Mock private BalanceRepository balanceRepository;
     @Mock private UserAccountRepository userAccountRepository;
@@ -57,7 +57,7 @@ class MarketOrderServiceTest {
         usdtAsset = new Asset("USDT", "Tether", 2);
         usdtAsset.setId(UUID.randomUUID());
 
-        btcUsdtPair = new Market(btcAsset, usdtAsset, "BTCUSDT");
+        btcUsdtPair = new Market(btcAsset, usdtAsset, "BTC/USDT");
         btcUsdtPair.setId(pairId);
         btcUsdtPair.setActive(true);
     }
@@ -74,7 +74,7 @@ class MarketOrderServiceTest {
         usdtBalance.setAvailable(new BigDecimal("1000.000000000000000000"));
 
         when(marketService.getMarket(pairId)).thenReturn(btcUsdtPair);
-        when(binanceService.getCurrentPrice("BTCUSDT")).thenReturn(btcPrice);
+        when(whiteBitService.getCurrentPrice("BTC_USDT")).thenReturn(btcPrice);
         when(userService.getUser(userId)).thenReturn(user);
         when(balanceRepository.findByUserIdAndAssetIdWithLock(userId, usdtAsset.getId()))
                 .thenReturn(Optional.of(usdtBalance));
@@ -111,7 +111,7 @@ class MarketOrderServiceTest {
         usdtBalance.setAvailable(new BigDecimal("10.000000000000000000"));
 
         when(marketService.getMarket(pairId)).thenReturn(btcUsdtPair);
-        when(binanceService.getCurrentPrice("BTCUSDT")).thenReturn(btcPrice);
+        when(whiteBitService.getCurrentPrice("BTC_USDT")).thenReturn(btcPrice);
         when(userService.getUser(userId)).thenReturn(user);
         when(balanceRepository.findByUserIdAndAssetIdWithLock(userId, usdtAsset.getId()))
                 .thenReturn(Optional.of(usdtBalance));
@@ -129,7 +129,7 @@ class MarketOrderServiceTest {
         BigDecimal quoteAmount = new BigDecimal("100.00");
 
         when(marketService.getMarket(pairId)).thenReturn(btcUsdtPair);
-        when(binanceService.getCurrentPrice("BTCUSDT")).thenReturn(null);
+        when(whiteBitService.getCurrentPrice("BTC_USDT")).thenReturn(null);
 
         assertThatThrownBy(() -> marketOrderService.executeBuy(userId, pairId, quoteAmount))
                 .isInstanceOf(TransactionService.PriceUnavailableException.class);
@@ -147,7 +147,7 @@ class MarketOrderServiceTest {
         btcBalance.setAvailable(new BigDecimal("0.100000000000000000"));
 
         when(marketService.getMarket(pairId)).thenReturn(btcUsdtPair);
-        when(binanceService.getCurrentPrice("BTCUSDT")).thenReturn(btcPrice);
+        when(whiteBitService.getCurrentPrice("BTC_USDT")).thenReturn(btcPrice);
         when(userService.getUser(userId)).thenReturn(user);
         when(balanceRepository.findByUserIdAndAssetIdWithLock(userId, btcAsset.getId()))
                 .thenReturn(Optional.of(btcBalance));
@@ -183,7 +183,7 @@ class MarketOrderServiceTest {
         btcBalance.setAvailable(new BigDecimal("0.001000000000000000"));
 
         when(marketService.getMarket(pairId)).thenReturn(btcUsdtPair);
-        when(binanceService.getCurrentPrice("BTCUSDT")).thenReturn(btcPrice);
+        when(whiteBitService.getCurrentPrice("BTC_USDT")).thenReturn(btcPrice);
         when(userService.getUser(userId)).thenReturn(user);
         when(balanceRepository.findByUserIdAndAssetIdWithLock(userId, btcAsset.getId()))
                 .thenReturn(Optional.of(btcBalance));

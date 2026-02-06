@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useOutletContext } from 'react-router-dom';
 import { getBySymbol, getMyPosition } from '../shared/api/services/assetsService';
 import { getHistory } from '../shared/api/services/priceService';
 import { create as createTransaction } from '../shared/api/services/transactionsService';
@@ -50,6 +50,7 @@ const RANGES = [
 
 function AssetDetailPage() {
   const { symbol } = useParams();
+  const { refreshCashBalance } = useOutletContext() || {};
   const [asset, setAsset] = useState(null);
   const [position, setPosition] = useState(null);
   const [history, setHistory] = useState([]);
@@ -125,6 +126,8 @@ function AssetDetailPage() {
     // Refresh position and asset data after a successful trade
     loadPosition();
     loadAsset();
+    // Refresh the header USDT balance
+    if (refreshCashBalance) refreshCashBalance();
   };
 
   if (errors.asset) {
@@ -257,22 +260,23 @@ function TradeWidget({ symbol, currentPrice, position, onSuccess }) {
   const [cashBalance, setCashBalance] = useState(null);
 
   // Load balances
-  useEffect(() => {
-    const loadBalances = async () => {
-      try {
-        const [walletBalances, cash] = await Promise.all([
-          getWalletBalances(),
-          getCashBalance(),
-        ]);
-        setBalances(walletBalances || []);
-        setCashBalance(cash);
-      } catch {
-        setBalances([]);
-        setCashBalance(null);
-      }
-    };
-    loadBalances();
+  const loadBalances = useCallback(async () => {
+    try {
+      const [walletBalances, cash] = await Promise.all([
+        getWalletBalances(),
+        getCashBalance(),
+      ]);
+      setBalances(walletBalances || []);
+      setCashBalance(cash);
+    } catch {
+      setBalances([]);
+      setCashBalance(null);
+    }
   }, []);
+
+  useEffect(() => {
+    loadBalances();
+  }, [loadBalances]);
 
   const numAmount = amount ? Number(amount) : 0;
 
@@ -347,6 +351,8 @@ function TradeWidget({ symbol, currentPrice, position, onSuccess }) {
 
       setAmount('');
       onSuccess();
+      // Refresh local balances so "Available" updates immediately
+      loadBalances();
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Transaction failed';
       setError(msg);

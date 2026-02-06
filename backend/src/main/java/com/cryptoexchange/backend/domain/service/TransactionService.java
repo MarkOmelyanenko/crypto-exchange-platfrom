@@ -24,7 +24,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Service for executing simple BUY/SELL transactions at current Binance market price.
+ * Service for executing simple BUY/SELL transactions at current WhiteBit market price.
  * Each transaction atomically updates user balances (USDT cash ↔ asset holdings).
  */
 @Service
@@ -40,24 +40,24 @@ public class TransactionService {
     private final UserAccountRepository userAccountRepository;
     private final UserService userService;
     private final AssetService assetService;
-    private final BinanceService binanceService;
+    private final WhiteBitService whiteBitService;
 
     public TransactionService(TransactionRepository transactionRepository,
                               BalanceRepository balanceRepository,
                               UserAccountRepository userAccountRepository,
                               UserService userService,
                               AssetService assetService,
-                              BinanceService binanceService) {
+                              WhiteBitService whiteBitService) {
         this.transactionRepository = transactionRepository;
         this.balanceRepository = balanceRepository;
         this.userAccountRepository = userAccountRepository;
         this.userService = userService;
         this.assetService = assetService;
-        this.binanceService = binanceService;
+        this.whiteBitService = whiteBitService;
     }
 
     /**
-     * Execute a BUY or SELL transaction at the current Binance market price.
+     * Execute a BUY or SELL transaction at the current WhiteBit market price.
      * All balance updates and transaction creation happen in a single DB transaction.
      *
      * @param userId   authenticated user ID
@@ -78,7 +78,7 @@ public class TransactionService {
         // Validate asset exists in DB
         Asset asset = assetService.getAssetBySymbol(normalizedSymbol);
 
-        // Fetch current price from Binance
+        // Fetch current price from WhiteBit
         BigDecimal priceUsd = fetchCurrentPrice(normalizedSymbol);
 
         BigDecimal normalizedQuantity = MoneyUtils.normalize(quantity);
@@ -105,11 +105,11 @@ public class TransactionService {
     }
 
     /**
-     * Fetch current price from Binance. Throws 503 if unavailable.
+     * Fetch current price from WhiteBit. Throws 503 if unavailable.
      */
     BigDecimal fetchCurrentPrice(String symbol) {
-        String binanceSymbol = binanceService.toBinanceSymbol(symbol);
-        BigDecimal price = binanceService.getCurrentPrice(binanceSymbol);
+        String whiteBitSymbol = whiteBitService.toWhiteBitSymbol(symbol);
+        BigDecimal price = whiteBitService.getCurrentPrice(whiteBitSymbol);
         if (price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
             throw new PriceUnavailableException(
                     "Price temporarily unavailable for " + symbol + ". Please try again later.");

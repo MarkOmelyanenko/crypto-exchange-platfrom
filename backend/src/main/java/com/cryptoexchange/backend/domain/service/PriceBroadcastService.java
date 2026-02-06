@@ -16,11 +16,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Shared price broadcasting service.
- * Periodically fetches prices from Binance (reusing BinanceService's cached batch fetch)
+ * Periodically fetches prices from WhiteBit (reusing WhiteBitService's cached batch fetch)
  * and pushes SSE events to all connected clients.
  *
  * Key design:
- * - ONE Binance request per tick (shared across all clients)
+ * - ONE WhiteBit request per tick (shared across all clients)
  * - Clients register with a set of symbols (max 20)
  * - Heartbeat every ~15s to keep connections alive
  */
@@ -31,7 +31,7 @@ public class PriceBroadcastService {
     public static final int MAX_SYMBOLS = 20;
     public static final int MAX_CONNECTIONS = 200;
 
-    private final BinanceService binanceService;
+    private final WhiteBitService whiteBitService;
 
     /** Currently cached prices (updated every tick) */
     private final ConcurrentHashMap<String, PriceEvent> latestPrices = new ConcurrentHashMap<>();
@@ -42,8 +42,8 @@ public class PriceBroadcastService {
     private final AtomicInteger connectionCount = new AtomicInteger(0);
     private long lastHeartbeatMs = System.currentTimeMillis();
 
-    public PriceBroadcastService(BinanceService binanceService) {
-        this.binanceService = binanceService;
+    public PriceBroadcastService(WhiteBitService whiteBitService) {
+        this.whiteBitService = whiteBitService;
     }
 
     /**
@@ -76,12 +76,12 @@ public class PriceBroadcastService {
     }
 
     /**
-     * Scheduled: fetch prices from Binance every 2 seconds and broadcast to all subscribers.
+     * Scheduled: fetch prices from WhiteBit every 2 seconds and broadcast to all subscribers.
      */
     @Scheduled(fixedDelay = 2000, initialDelay = 3000)
     public void fetchAndBroadcast() {
         if (subscriptions.isEmpty()) {
-            return; // No clients connected — skip Binance call
+            return; // No clients connected — skip WhiteBit call
         }
 
         // Collect unique symbols across all subscriptions
@@ -94,14 +94,14 @@ public class PriceBroadcastService {
             return;
         }
 
-        // Fetch using batch (single Binance API call, cached 5s in BinanceService)
-        List<String> binanceSymbols = allSymbols.stream()
-                .map(binanceService::toBinanceSymbol)
+        // Fetch using batch (single WhiteBit API call, cached 5s in WhiteBitService)
+        List<String> whiteBitSymbols = allSymbols.stream()
+                .map(whiteBitService::toWhiteBitSymbol)
                 .toList();
 
-        Map<String, BinanceService.BinanceTicker24h> tickers;
+        Map<String, WhiteBitService.WhiteBitTicker24h> tickers;
         try {
-            tickers = binanceService.getBatchTicker24h(binanceSymbols);
+            tickers = whiteBitService.getBatchTicker24h(whiteBitSymbols);
         } catch (Exception e) {
             log.warn("Failed to fetch batch tickers for SSE broadcast: {}", e.getMessage());
             return;
@@ -110,8 +110,8 @@ public class PriceBroadcastService {
         // Build price events
         OffsetDateTime now = OffsetDateTime.now();
         for (String symbol : allSymbols) {
-            String binanceSymbol = binanceService.toBinanceSymbol(symbol);
-            BinanceService.BinanceTicker24h ticker = tickers.get(binanceSymbol.toUpperCase());
+            String whiteBitSymbol = whiteBitService.toWhiteBitSymbol(symbol);
+            WhiteBitService.WhiteBitTicker24h ticker = tickers.get(whiteBitSymbol.toUpperCase());
             if (ticker != null && ticker.lastPrice != null) {
                 try {
                     BigDecimal price = new BigDecimal(ticker.lastPrice);

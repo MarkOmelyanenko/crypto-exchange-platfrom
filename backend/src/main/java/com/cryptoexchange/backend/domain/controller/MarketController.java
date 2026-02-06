@@ -3,7 +3,7 @@ package com.cryptoexchange.backend.domain.controller;
 import com.cryptoexchange.backend.domain.model.Market;
 import com.cryptoexchange.backend.domain.model.MarketTick;
 import com.cryptoexchange.backend.domain.model.MarketTrade;
-import com.cryptoexchange.backend.domain.service.BinanceService;
+import com.cryptoexchange.backend.domain.service.WhiteBitService;
 import com.cryptoexchange.backend.domain.service.MarketService;
 import com.cryptoexchange.backend.domain.service.MarketTickStore;
 import com.cryptoexchange.backend.domain.service.MarketTradeStore;
@@ -36,19 +36,19 @@ public class MarketController {
     private final MarketSnapshotStore snapshotStore;
     private final MarketTickStore tickStore;
     private final MarketTradeStore tradeStore;
-    private final BinanceService binanceService;
+    private final WhiteBitService whiteBitService;
 
     public MarketController(
             MarketService marketService,
             MarketSnapshotStore snapshotStore,
             MarketTickStore tickStore,
             MarketTradeStore tradeStore,
-            BinanceService binanceService) {
+            WhiteBitService whiteBitService) {
         this.marketService = marketService;
         this.snapshotStore = snapshotStore;
         this.tickStore = tickStore;
         this.tradeStore = tradeStore;
-        this.binanceService = binanceService;
+        this.whiteBitService = whiteBitService;
     }
 
     @GetMapping
@@ -72,12 +72,12 @@ public class MarketController {
     }
 
     @GetMapping("/price")
-    @Operation(summary = "Get current price for a pair", description = "Returns current Binance price for a trading pair")
+    @Operation(summary = "Get current price for a pair", description = "Returns current WhiteBit price for a trading pair")
     public ResponseEntity<PriceResponse> getPrice(@RequestParam UUID pairId) {
         Market pair = marketService.getMarket(pairId);
-        // Convert market symbol (e.g., "BTC/USDT") to Binance format (e.g., "BTCUSDT")
-        String binanceSymbol = pair.getSymbol().replace("/", "").toUpperCase();
-        BigDecimal price = binanceService.getCurrentPrice(binanceSymbol);
+        // Convert market symbol (e.g., "BTC/USDT") to WhiteBit format (e.g., "BTC_USDT")
+        String whiteBitSymbol = pair.getSymbol().replace("/", "_").toUpperCase();
+        BigDecimal price = whiteBitService.getCurrentPrice(whiteBitSymbol);
         if (price == null) {
             throw new com.cryptoexchange.backend.domain.exception.NotFoundException(
                     "Price unavailable for " + pair.getSymbol());
@@ -87,19 +87,19 @@ public class MarketController {
 
     @GetMapping("/history")
     @Operation(summary = "Get price history for a trading pair",
-               description = "Returns Binance kline data for any trading pair (e.g. BTC/USDT, ETH/BTC)")
+               description = "Returns WhiteBit kline data for any trading pair (e.g. BTC/USDT, ETH/BTC)")
     public ResponseEntity<List<PairHistoryPoint>> getPairHistory(
             @RequestParam UUID pairId,
             @RequestParam(defaultValue = "24h") String range) {
         Market pair = marketService.getMarket(pairId);
-        String binanceSymbol = pair.getSymbol().replace("/", "").toUpperCase();
+        String whiteBitSymbol = pair.getSymbol().replace("/", "_").toUpperCase();
 
-        String interval = getBinanceInterval(range);
-        int limit = getBinanceLimit(range);
+        String interval = getWhiteBitInterval(range);
+        int limit = getWhiteBitLimit(range);
         OffsetDateTime from = calculateFromTime(range);
         OffsetDateTime to = OffsetDateTime.now();
 
-        List<BinanceService.PriceHistoryPoint> klines = binanceService.getKlines(binanceSymbol, interval, limit);
+        List<WhiteBitService.PriceHistoryPoint> klines = whiteBitService.getKlines(whiteBitSymbol, interval, limit);
         List<PairHistoryPoint> history = klines.stream()
                 .filter(p -> !p.timestamp.isBefore(from) && !p.timestamp.isAfter(to))
                 .map(p -> new PairHistoryPoint(p.timestamp, p.priceUsd))
@@ -110,7 +110,7 @@ public class MarketController {
 
     /* ── helpers shared with PriceController ── */
 
-    private static String getBinanceInterval(String range) {
+    private static String getWhiteBitInterval(String range) {
         return switch (range.toLowerCase()) {
             case "24h", "1d" -> "1h";
             case "7d", "1w"  -> "4h";
@@ -119,7 +119,7 @@ public class MarketController {
         };
     }
 
-    private static int getBinanceLimit(String range) {
+    private static int getWhiteBitLimit(String range) {
         return switch (range.toLowerCase()) {
             case "24h", "1d" -> 24;
             case "7d", "1w"  -> 42;

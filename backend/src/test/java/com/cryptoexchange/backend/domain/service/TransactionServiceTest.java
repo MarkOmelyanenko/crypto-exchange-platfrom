@@ -36,7 +36,7 @@ class TransactionServiceTest {
     @Mock private UserAccountRepository userAccountRepository;
     @Mock private UserService userService;
     @Mock private AssetService assetService;
-    @Mock private BinanceService binanceService;
+    @Mock private WhiteBitService whiteBitService;
 
     @InjectMocks private TransactionService transactionService;
 
@@ -92,8 +92,8 @@ class TransactionServiceTest {
             // Mocks
             when(assetService.getAssetBySymbol("BTC")).thenReturn(btcAsset);
             when(assetService.getAssetBySymbol("USDT")).thenReturn(usdtAsset);
-            when(binanceService.toBinanceSymbol("BTC")).thenReturn("BTCUSDT");
-            when(binanceService.getCurrentPrice("BTCUSDT")).thenReturn(price);
+            when(whiteBitService.toWhiteBitSymbol("BTC")).thenReturn("BTC_USDT");
+            when(whiteBitService.getCurrentPrice("BTC_USDT")).thenReturn(price);
             when(userService.getUser(userId)).thenReturn(user);
             stubSyncCashBalance();
 
@@ -137,8 +137,8 @@ class TransactionServiceTest {
 
             when(assetService.getAssetBySymbol("BTC")).thenReturn(btcAsset);
             when(assetService.getAssetBySymbol("USDT")).thenReturn(usdtAsset);
-            when(binanceService.toBinanceSymbol("BTC")).thenReturn("BTCUSDT");
-            when(binanceService.getCurrentPrice("BTCUSDT")).thenReturn(price);
+            when(whiteBitService.toWhiteBitSymbol("BTC")).thenReturn("BTC_USDT");
+            when(whiteBitService.getCurrentPrice("BTC_USDT")).thenReturn(price);
             when(userService.getUser(userId)).thenReturn(user);
 
             Balance cashBalance = makeBalance(user, usdtAsset, "100.00");
@@ -158,8 +158,8 @@ class TransactionServiceTest {
 
             when(assetService.getAssetBySymbol("BTC")).thenReturn(btcAsset);
             when(assetService.getAssetBySymbol("USDT")).thenReturn(usdtAsset);
-            when(binanceService.toBinanceSymbol("BTC")).thenReturn("BTCUSDT");
-            when(binanceService.getCurrentPrice("BTCUSDT")).thenReturn(price);
+            when(whiteBitService.toWhiteBitSymbol("BTC")).thenReturn("BTC_USDT");
+            when(whiteBitService.getCurrentPrice("BTC_USDT")).thenReturn(price);
             when(userService.getUser(userId)).thenReturn(user);
 
             when(balanceRepository.findByUserIdAndAssetIdWithLock(userId, usdtAssetId))
@@ -178,8 +178,8 @@ class TransactionServiceTest {
 
             when(assetService.getAssetBySymbol("BTC")).thenReturn(btcAsset);
             when(assetService.getAssetBySymbol("USDT")).thenReturn(usdtAsset);
-            when(binanceService.toBinanceSymbol("BTC")).thenReturn("BTCUSDT");
-            when(binanceService.getCurrentPrice("BTCUSDT")).thenReturn(price);
+            when(whiteBitService.toWhiteBitSymbol("BTC")).thenReturn("BTC_USDT");
+            when(whiteBitService.getCurrentPrice("BTC_USDT")).thenReturn(price);
             when(userService.getUser(userId)).thenReturn(user);
             stubSyncCashBalance();
 
@@ -219,8 +219,8 @@ class TransactionServiceTest {
 
             when(assetService.getAssetBySymbol("BTC")).thenReturn(btcAsset);
             when(assetService.getAssetBySymbol("USDT")).thenReturn(usdtAsset);
-            when(binanceService.toBinanceSymbol("BTC")).thenReturn("BTCUSDT");
-            when(binanceService.getCurrentPrice("BTCUSDT")).thenReturn(price);
+            when(whiteBitService.toWhiteBitSymbol("BTC")).thenReturn("BTC_USDT");
+            when(whiteBitService.getCurrentPrice("BTC_USDT")).thenReturn(price);
             when(userService.getUser(userId)).thenReturn(user);
             stubSyncCashBalance();
 
@@ -254,8 +254,8 @@ class TransactionServiceTest {
 
             when(assetService.getAssetBySymbol("BTC")).thenReturn(btcAsset);
             when(assetService.getAssetBySymbol("USDT")).thenReturn(usdtAsset);
-            when(binanceService.toBinanceSymbol("BTC")).thenReturn("BTCUSDT");
-            when(binanceService.getCurrentPrice("BTCUSDT")).thenReturn(price);
+            when(whiteBitService.toWhiteBitSymbol("BTC")).thenReturn("BTC_USDT");
+            when(whiteBitService.getCurrentPrice("BTC_USDT")).thenReturn(price);
             when(userService.getUser(userId)).thenReturn(user);
 
             Balance btcBalance = makeBalance(user, btcAsset, "1.0");
@@ -275,8 +275,8 @@ class TransactionServiceTest {
 
             when(assetService.getAssetBySymbol("BTC")).thenReturn(btcAsset);
             when(assetService.getAssetBySymbol("USDT")).thenReturn(usdtAsset);
-            when(binanceService.toBinanceSymbol("BTC")).thenReturn("BTCUSDT");
-            when(binanceService.getCurrentPrice("BTCUSDT")).thenReturn(price);
+            when(whiteBitService.toWhiteBitSymbol("BTC")).thenReturn("BTC_USDT");
+            when(whiteBitService.getCurrentPrice("BTC_USDT")).thenReturn(price);
             when(userService.getUser(userId)).thenReturn(user);
 
             when(balanceRepository.findByUserIdAndAssetIdWithLock(userId, btcAssetId))
@@ -336,8 +336,8 @@ class TransactionServiceTest {
         @DisplayName("Price unavailable returns 503")
         void priceUnavailable() {
             when(assetService.getAssetBySymbol("BTC")).thenReturn(btcAsset);
-            when(binanceService.toBinanceSymbol("BTC")).thenReturn("BTCUSDT");
-            when(binanceService.getCurrentPrice("BTCUSDT")).thenReturn(null);
+            when(whiteBitService.toWhiteBitSymbol("BTC")).thenReturn("BTC_USDT");
+            when(whiteBitService.getCurrentPrice("BTC_USDT")).thenReturn(null);
 
             assertThatThrownBy(() ->
                     transactionService.execute(userId, "BTC", OrderSide.BUY, new BigDecimal("0.01")))

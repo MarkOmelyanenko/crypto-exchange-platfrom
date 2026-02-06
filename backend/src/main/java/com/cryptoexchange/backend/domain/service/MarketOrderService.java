@@ -21,7 +21,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Executes spot market orders (BUY / SELL) against the current Binance price.
+ * Executes spot market orders (BUY / SELL) against the current WhiteBit price.
  * <p>
  * BUY:  user provides quoteAmount (USDT to spend) → receives baseQty of base asset.
  * SELL: user provides baseAmount of base asset to sell → receives quoteQty USDT.
@@ -37,20 +37,20 @@ public class MarketOrderService {
     private static final MathContext MC = new MathContext(18, RoundingMode.HALF_UP);
 
     private final MarketService marketService;
-    private final BinanceService binanceService;
+    private final WhiteBitService whiteBitService;
     private final UserService userService;
     private final BalanceRepository balanceRepository;
     private final UserAccountRepository userAccountRepository;
     private final TradeRepository tradeRepository;
 
     public MarketOrderService(MarketService marketService,
-                              BinanceService binanceService,
+                              WhiteBitService whiteBitService,
                               UserService userService,
                               BalanceRepository balanceRepository,
                               UserAccountRepository userAccountRepository,
                               TradeRepository tradeRepository) {
         this.marketService = marketService;
-        this.binanceService = binanceService;
+        this.whiteBitService = whiteBitService;
         this.userService = userService;
         this.balanceRepository = balanceRepository;
         this.userAccountRepository = userAccountRepository;
@@ -196,9 +196,9 @@ public class MarketOrderService {
     // ── Internal helpers ──
 
     private BigDecimal fetchPrice(String marketSymbol) {
-        // Convert market symbol (e.g., "BTC/USDT") to Binance format (e.g., "BTCUSDT")
-        String binanceSymbol = marketSymbol.replace("/", "").toUpperCase();
-        BigDecimal price = binanceService.getCurrentPrice(binanceSymbol);
+        // Convert market symbol (e.g., "BTC/USDT") to WhiteBit format (e.g., "BTC_USDT")
+        String whiteBitSymbol = marketSymbol.replace("/", "_").toUpperCase();
+        BigDecimal price = whiteBitService.getCurrentPrice(whiteBitSymbol);
         if (price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
             throw new TransactionService.PriceUnavailableException(
                     "Price temporarily unavailable for " + marketSymbol + ". Please try again later.");

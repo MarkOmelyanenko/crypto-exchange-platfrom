@@ -4,8 +4,8 @@ import com.cryptoexchange.backend.domain.model.Asset;
 import com.cryptoexchange.backend.domain.model.Balance;
 import com.cryptoexchange.backend.domain.repository.BalanceRepository;
 import com.cryptoexchange.backend.domain.service.AssetService;
-import com.cryptoexchange.backend.domain.service.BinanceService;
-import com.cryptoexchange.backend.domain.service.BinanceService.BinanceTicker24h;
+import com.cryptoexchange.backend.domain.service.WhiteBitService;
+import com.cryptoexchange.backend.domain.service.WhiteBitService.WhiteBitTicker24h;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
 
 /**
  * Asset management endpoints.
- * Combines asset metadata from DB with live prices from Binance.
+ * Combines asset metadata from DB with live prices from WhiteBit.
  */
 @RestController
 @RequestMapping("/api/assets")
@@ -34,20 +34,20 @@ public class AssetController {
     private static final Logger log = LoggerFactory.getLogger(AssetController.class);
 
     private final AssetService assetService;
-    private final BinanceService binanceService;
+    private final WhiteBitService whiteBitService;
     private final BalanceRepository balanceRepository;
 
     public AssetController(AssetService assetService,
-                           BinanceService binanceService,
+                           WhiteBitService whiteBitService,
                            BalanceRepository balanceRepository) {
         this.assetService = assetService;
-        this.binanceService = binanceService;
+        this.whiteBitService = whiteBitService;
         this.balanceRepository = balanceRepository;
     }
 
     @GetMapping
     @Operation(summary = "List assets with prices",
-               description = "Returns paginated list of assets with live Binance prices. " +
+               description = "Returns paginated list of assets with live WhiteBit prices. " +
                              "Supports search, sorting, and pagination.")
     public ResponseEntity<PagedResponse<AssetListDto>> listAssets(
             @RequestParam(required = false) String q,
@@ -64,21 +64,21 @@ public class AssetController {
             allAssets = assetService.listAssets();
         }
 
-        // 2. Fetch Binance 24h tickers in batch for all tradeable assets
-        List<String> binanceSymbols = allAssets.stream()
+        // 2. Fetch WhiteBit 24h tickers in batch for all tradeable assets
+        List<String> whiteBitSymbols = allAssets.stream()
                 .filter(a -> !"USDT".equalsIgnoreCase(a.getSymbol()))
-                .map(a -> binanceService.toBinanceSymbol(a.getSymbol()))
+                .map(a -> whiteBitService.toWhiteBitSymbol(a.getSymbol()))
                 .collect(Collectors.toList());
 
-        Map<String, BinanceTicker24h> tickers = Collections.emptyMap();
+        Map<String, WhiteBitTicker24h> tickers = Collections.emptyMap();
         try {
-            tickers = binanceService.getBatchTicker24h(binanceSymbols);
+            tickers = whiteBitService.getBatchTicker24h(whiteBitSymbols);
         } catch (Exception e) {
-            log.error("Failed to fetch batch tickers from Binance", e);
+            log.error("Failed to fetch batch tickers from WhiteBit", e);
         }
 
         // 3. Build DTOs with price data
-        final Map<String, BinanceTicker24h> tickersFinal = tickers;
+        final Map<String, WhiteBitTicker24h> tickersFinal = tickers;
         List<AssetListDto> dtos = allAssets.stream()
                 .map(asset -> buildAssetListDto(asset, tickersFinal))
                 .collect(Collectors.toList());
@@ -106,12 +106,12 @@ public class AssetController {
     public ResponseEntity<AssetDetailDto> getAssetBySymbol(@PathVariable String symbol) {
         Asset asset = assetService.findBySymbolIgnoreCase(symbol);
 
-        String binanceSymbol = binanceService.toBinanceSymbol(asset.getSymbol());
-        BinanceTicker24h ticker = null;
+        String whiteBitSymbol = whiteBitService.toWhiteBitSymbol(asset.getSymbol());
+        WhiteBitTicker24h ticker = null;
         boolean priceUnavailable = false;
 
         try {
-            ticker = binanceService.getTicker24h(binanceSymbol);
+            ticker = whiteBitService.getTicker24h(whiteBitSymbol);
         } catch (Exception e) {
             log.warn("Failed to fetch ticker for {}: {}", symbol, e.getMessage());
         }
@@ -181,8 +181,8 @@ public class AssetController {
 
             // Get current price for market value calculation
             if (!"USDT".equalsIgnoreCase(asset.getSymbol())) {
-                String binanceSymbol = binanceService.toBinanceSymbol(asset.getSymbol());
-                BigDecimal currentPrice = binanceService.getCurrentPrice(binanceSymbol);
+                String whiteBitSymbol = whiteBitService.toWhiteBitSymbol(asset.getSymbol());
+                BigDecimal currentPrice = whiteBitService.getCurrentPrice(whiteBitSymbol);
                 if (currentPrice != null && quantity.compareTo(BigDecimal.ZERO) > 0) {
                     dto.currentPriceUsd = currentPrice;
                     dto.marketValueUsd = quantity.multiply(currentPrice).setScale(2, RoundingMode.HALF_UP);
@@ -203,7 +203,7 @@ public class AssetController {
 
     // ─── Helpers ───
 
-    private AssetListDto buildAssetListDto(Asset asset, Map<String, BinanceTicker24h> tickers) {
+    private AssetListDto buildAssetListDto(Asset asset, Map<String, WhiteBitTicker24h> tickers) {
         AssetListDto dto = new AssetListDto();
         dto.id = asset.getId().toString();
         dto.symbol = asset.getSymbol();
@@ -216,8 +216,8 @@ public class AssetController {
             dto.change24hPercent = BigDecimal.ZERO;
             dto.priceUnavailable = false;
         } else {
-            String binanceSymbol = binanceService.toBinanceSymbol(asset.getSymbol());
-            BinanceTicker24h ticker = tickers.get(binanceSymbol);
+            String whiteBitSymbol = whiteBitService.toWhiteBitSymbol(asset.getSymbol());
+            WhiteBitTicker24h ticker = tickers.get(whiteBitSymbol);
             if (ticker != null) {
                 dto.priceUsd = parseBigDecimal(ticker.lastPrice);
                 dto.change24hPercent = parseBigDecimal(ticker.priceChangePercent);

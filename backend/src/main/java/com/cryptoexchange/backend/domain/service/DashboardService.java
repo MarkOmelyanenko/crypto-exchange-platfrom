@@ -32,7 +32,7 @@ public class DashboardService {
     private final MarketService marketService;
     private final MarketTickRepository marketTickRepository;
     private final PriceTickRepository priceTickRepository;
-    private final BinanceService binanceService;
+    private final WhiteBitService whiteBitService;
 
     public DashboardService(BalanceRepository balanceRepository,
                            TradeRepository tradeRepository,
@@ -42,7 +42,7 @@ public class DashboardService {
                            MarketService marketService,
                            MarketTickRepository marketTickRepository,
                            PriceTickRepository priceTickRepository,
-                           BinanceService binanceService) {
+                           WhiteBitService whiteBitService) {
         this.balanceRepository = balanceRepository;
         this.tradeRepository = tradeRepository;
         this.orderRepository = orderRepository;
@@ -51,7 +51,7 @@ public class DashboardService {
         this.marketService = marketService;
         this.marketTickRepository = marketTickRepository;
         this.priceTickRepository = priceTickRepository;
-        this.binanceService = binanceService;
+        this.whiteBitService = whiteBitService;
     }
 
     /**
@@ -519,7 +519,7 @@ public class DashboardService {
 
     /**
      * Get current prices for all assets.
-     * Uses a single batch Binance API call (fetches ALL tickers at once, cached 5s)
+     * Uses a single batch WhiteBit API call (fetches ALL tickers at once, cached 5s)
      * with fallback to PriceTick DB and MarketTick DB.
      */
     private Map<String, BigDecimal> getCurrentPrices() {
@@ -532,30 +532,30 @@ public class DashboardService {
             symbols.add(market.getBaseAsset().getSymbol());
         }
 
-        // 1) Batch-fetch from Binance (single API call for ALL tickers, cached 5s)
+        // 1) Batch-fetch from WhiteBit (single API call for ALL tickers, cached 5s)
         try {
-            List<String> binanceSymbols = symbols.stream()
-                .map(binanceService::toBinanceSymbol)
+            List<String> whiteBitSymbols = symbols.stream()
+                .map(whiteBitService::toWhiteBitSymbol)
                 .collect(Collectors.toList());
-            Map<String, BinanceService.BinanceTicker24h> tickers =
-                binanceService.getBatchTicker24h(binanceSymbols);
+            Map<String, WhiteBitService.WhiteBitTicker24h> tickers =
+                whiteBitService.getBatchTicker24h(whiteBitSymbols);
 
             for (String symbol : symbols) {
-                String binanceSymbol = binanceService.toBinanceSymbol(symbol);
-                BinanceService.BinanceTicker24h ticker = tickers.get(binanceSymbol);
+                String whiteBitSymbol = whiteBitService.toWhiteBitSymbol(symbol);
+                WhiteBitService.WhiteBitTicker24h ticker = tickers.get(whiteBitSymbol);
                 if (ticker != null && ticker.lastPrice != null) {
                     try {
                         prices.put(symbol, new BigDecimal(ticker.lastPrice));
                     } catch (NumberFormatException e) {
-                        log.warn("Invalid price format from Binance for {}: {}", symbol, ticker.lastPrice);
+                        log.warn("Invalid price format from WhiteBit for {}: {}", symbol, ticker.lastPrice);
                     }
                 }
             }
         } catch (Exception e) {
-            log.warn("Failed to batch-fetch prices from Binance: {}", e.getMessage());
+            log.warn("Failed to batch-fetch prices from WhiteBit: {}", e.getMessage());
         }
 
-        // 2) Fallback to PriceTick DB (Binance-fetched ticks stored by scheduled job)
+        // 2) Fallback to PriceTick DB (WhiteBit-fetched ticks stored by scheduled job)
         for (String symbol : symbols) {
             if (!prices.containsKey(symbol)) {
                 priceTickRepository.findFirstBySymbolOrderByTsDesc(symbol)

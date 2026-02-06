@@ -4,7 +4,7 @@ import com.cryptoexchange.backend.domain.model.MarketTick;
 import com.cryptoexchange.backend.domain.model.PriceTick;
 import com.cryptoexchange.backend.domain.repository.MarketTickRepository;
 import com.cryptoexchange.backend.domain.repository.PriceTickRepository;
-import com.cryptoexchange.backend.domain.service.BinanceService;
+import com.cryptoexchange.backend.domain.service.WhiteBitService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
@@ -27,18 +27,18 @@ public class PriceController {
     private static final Logger log = LoggerFactory.getLogger(PriceController.class);
     private final MarketTickRepository marketTickRepository;
     private final PriceTickRepository priceTickRepository;
-    private final BinanceService binanceService;
+    private final WhiteBitService whiteBitService;
 
     public PriceController(MarketTickRepository marketTickRepository,
                            PriceTickRepository priceTickRepository,
-                           BinanceService binanceService) {
+                           WhiteBitService whiteBitService) {
         this.marketTickRepository = marketTickRepository;
         this.priceTickRepository = priceTickRepository;
-        this.binanceService = binanceService;
+        this.whiteBitService = whiteBitService;
     }
 
     @GetMapping("/snapshot")
-    @Operation(summary = "Get price snapshot", description = "Returns current prices for specified symbols from Binance")
+    @Operation(summary = "Get price snapshot", description = "Returns current prices for specified symbols from WhiteBit")
     public ResponseEntity<List<PriceSnapshot>> getSnapshot(@RequestParam String symbols) {
         String[] symbolArray = symbols.split(",");
         List<PriceSnapshot> snapshots = new ArrayList<>();
@@ -48,14 +48,14 @@ public class PriceController {
             BigDecimal price = null;
             OffsetDateTime timestamp = OffsetDateTime.now();
 
-            // 1) Try Binance API for real-time prices
-            String binanceSymbol = binanceService.toBinanceSymbol(assetSymbol);
-            price = binanceService.getCurrentPrice(binanceSymbol);
+            // 1) Try WhiteBit API for real-time prices
+            String whiteBitSymbol = whiteBitService.toWhiteBitSymbol(assetSymbol);
+            price = whiteBitService.getCurrentPrice(whiteBitSymbol);
 
             if (price != null) {
-                log.debug("Got price from Binance for {}: {}", assetSymbol, price);
+                log.debug("Got price from WhiteBit for {}: {}", assetSymbol, price);
             } else {
-                // 2) Fallback to PriceTick DB (Binance-fetched ticks)
+                // 2) Fallback to PriceTick DB (WhiteBit-fetched ticks)
                 Optional<PriceTick> latestPriceTick = priceTickRepository.findFirstBySymbolOrderByTsDesc(assetSymbol);
                 if (latestPriceTick.isPresent()) {
                     price = latestPriceTick.get().getPriceUsd();
@@ -81,35 +81,35 @@ public class PriceController {
     }
 
     @GetMapping("/history")
-    @Operation(summary = "Get price history", description = "Returns Binance-driven price history for a symbol")
+    @Operation(summary = "Get price history", description = "Returns WhiteBit-driven price history for a symbol")
     public ResponseEntity<List<PriceHistoryPoint>> getHistory(
             @RequestParam String symbol,
             @RequestParam(defaultValue = "24h") String range) {
 
         String assetSymbol = symbol.trim().toUpperCase();
-        String binanceSymbol = binanceService.toBinanceSymbol(assetSymbol);
+        String whiteBitSymbol = whiteBitService.toWhiteBitSymbol(assetSymbol);
         OffsetDateTime from = calculateFromTime(range);
         OffsetDateTime to = OffsetDateTime.now();
 
         List<PriceHistoryPoint> history = new ArrayList<>();
 
-        // 1) Try Binance klines API for real price history
-        String interval = getBinanceInterval(range);
-        int limit = getBinanceLimit(range);
+        // 1) Try WhiteBit klines API for real price history
+        String interval = getWhiteBitInterval(range);
+        int limit = getWhiteBitLimit(range);
 
-        List<BinanceService.PriceHistoryPoint> binanceHistory = binanceService.getKlines(
-            binanceSymbol, interval, limit);
+        List<WhiteBitService.PriceHistoryPoint> whiteBitHistory = whiteBitService.getKlines(
+            whiteBitSymbol, interval, limit);
 
-        if (!binanceHistory.isEmpty()) {
-            history = binanceHistory.stream()
+        if (!whiteBitHistory.isEmpty()) {
+            history = whiteBitHistory.stream()
                 .filter(point -> !point.timestamp.isBefore(from) && !point.timestamp.isAfter(to))
                 .map(point -> new PriceHistoryPoint(point.timestamp, point.priceUsd))
                 .toList();
 
-            log.debug("Got {} price points from Binance for {}", history.size(), assetSymbol);
+            log.debug("Got {} price points from WhiteBit for {}", history.size(), assetSymbol);
         }
 
-        // 2) Fallback to PriceTick DB (Binance-fetched ticks stored by scheduled job)
+        // 2) Fallback to PriceTick DB (WhiteBit-fetched ticks stored by scheduled job)
         if (history.isEmpty()) {
             List<PriceTick> ticks = priceTickRepository.findBySymbolAndTsBetween(assetSymbol, from, to);
             if (!ticks.isEmpty()) {
@@ -133,11 +133,11 @@ public class PriceController {
             log.debug("Got {} price points from MarketTick DB for {}", history.size(), assetSymbol);
         }
 
-        // No mock/random data generation - all sources are Binance-driven
+        // No mock/random data generation - all sources are WhiteBit-driven
         return ResponseEntity.ok(history);
     }
 
-    private String getBinanceInterval(String range) {
+    private String getWhiteBitInterval(String range) {
         return switch (range.toLowerCase()) {
             case "24h", "1d" -> "1h";
             case "7d", "1w" -> "4h";
@@ -146,7 +146,7 @@ public class PriceController {
         };
     }
 
-    private int getBinanceLimit(String range) {
+    private int getWhiteBitLimit(String range) {
         return switch (range.toLowerCase()) {
             case "24h", "1d" -> 24;
             case "7d", "1w" -> 42;

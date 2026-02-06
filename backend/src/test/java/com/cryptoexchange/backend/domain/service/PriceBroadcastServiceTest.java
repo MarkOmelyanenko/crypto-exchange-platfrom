@@ -18,13 +18,13 @@ import static org.mockito.Mockito.*;
 class PriceBroadcastServiceTest {
 
     @Mock
-    private BinanceService binanceService;
+    private WhiteBitService whiteBitService;
 
     private PriceBroadcastService broadcastService;
 
     @BeforeEach
     void setUp() {
-        broadcastService = new PriceBroadcastService(binanceService);
+        broadcastService = new PriceBroadcastService(whiteBitService);
     }
 
     @Test
@@ -46,28 +46,27 @@ class PriceBroadcastServiceTest {
 
     @Test
     void fetchAndBroadcast_noSubscribers_skips() {
-        // No subscribers => should not call Binance at all
+        // No subscribers => should not call WhiteBit at all
         broadcastService.fetchAndBroadcast();
 
-        verifyNoInteractions(binanceService);
+        verifyNoInteractions(whiteBitService);
     }
 
     @Test
     void fetchAndBroadcast_withSubscribers_fetchesBatch() {
-        when(binanceService.toBinanceSymbol("BTC")).thenReturn("BTCUSDT");
+        when(whiteBitService.toWhiteBitSymbol("BTC")).thenReturn("BTC_USDT");
 
-        BinanceService.BinanceTicker24h ticker = new BinanceService.BinanceTicker24h();
-        ticker.symbol = "BTCUSDT";
+        WhiteBitService.WhiteBitTicker24h ticker = new WhiteBitService.WhiteBitTicker24h();
         ticker.lastPrice = "67000.50";
         ticker.priceChangePercent = "2.15";
 
-        when(binanceService.getBatchTicker24h(anyList())).thenReturn(Map.of("BTCUSDT", ticker));
+        when(whiteBitService.getBatchTicker24h(anyList())).thenReturn(Map.of("BTC_USDT", ticker));
 
         broadcastService.subscribe(Set.of("BTC"));
         broadcastService.fetchAndBroadcast();
 
         // Verify batch fetch was called
-        verify(binanceService).getBatchTicker24h(anyList());
+        verify(whiteBitService).getBatchTicker24h(anyList());
 
         // Verify price was cached
         Map<String, PriceBroadcastService.PriceEvent> prices = broadcastService.getLatestPrices();
@@ -76,9 +75,9 @@ class PriceBroadcastServiceTest {
     }
 
     @Test
-    void fetchAndBroadcast_binanceFailure_doesNotThrow() {
-        when(binanceService.toBinanceSymbol("BTC")).thenReturn("BTCUSDT");
-        when(binanceService.getBatchTicker24h(anyList())).thenThrow(new RuntimeException("Binance down"));
+    void fetchAndBroadcast_whiteBitFailure_doesNotThrow() {
+        when(whiteBitService.toWhiteBitSymbol("BTC")).thenReturn("BTC_USDT");
+        when(whiteBitService.getBatchTicker24h(anyList())).thenThrow(new RuntimeException("WhiteBit down"));
 
         broadcastService.subscribe(Set.of("BTC"));
 
