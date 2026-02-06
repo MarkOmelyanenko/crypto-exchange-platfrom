@@ -130,7 +130,7 @@ class AuthServiceTest {
     @Test
     void authenticate_WrongPassword_ThrowsException() {
         // Given
-        when(userAccountRepository.findByLoginOrEmail("testuser", "testuser")).thenReturn(Optional.of(testUser));
+        when(userAccountRepository.findByLoginOrEmail("testuser")).thenReturn(Optional.of(testUser));
         when(passwordEncoder.matches(testPassword, hashedPassword)).thenReturn(false);
 
         // When/Then

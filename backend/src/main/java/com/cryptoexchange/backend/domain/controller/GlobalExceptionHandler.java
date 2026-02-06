@@ -3,6 +3,7 @@ package com.cryptoexchange.backend.domain.controller;
 import com.cryptoexchange.backend.domain.exception.InsufficientBalanceException;
 import com.cryptoexchange.backend.domain.exception.InvalidOrderException;
 import com.cryptoexchange.backend.domain.exception.NotFoundException;
+import com.cryptoexchange.backend.domain.service.TransactionService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,6 +69,13 @@ public class GlobalExceptionHandler {
         log.warn("Invalid order: {}", ex.getMessage());
         ErrorResponse error = new ErrorResponse("INVALID_ORDER", ex.getMessage(), getRequestPath(), getRequestId());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    @ExceptionHandler(TransactionService.PriceUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handlePriceUnavailableException(TransactionService.PriceUnavailableException ex) {
+        log.warn("Price unavailable: {}", ex.getMessage());
+        ErrorResponse error = new ErrorResponse("PRICE_UNAVAILABLE", ex.getMessage(), getRequestPath(), getRequestId());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(error);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

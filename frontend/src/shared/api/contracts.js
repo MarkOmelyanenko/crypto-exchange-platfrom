@@ -88,12 +88,29 @@
  */
 
 /**
+ * @typedef {Object} CreateTransactionRequest
+ * @property {string} symbol - Asset symbol (e.g. 'BTC')
+ * @property {'BUY'|'SELL'} side - Transaction side
+ * @property {number} quantity - Amount of asset to buy/sell
+ */
+
+/**
  * @typedef {Object} TransactionDto
  * @property {string} id - Transaction ID (UUID)
- * @property {string} type - Transaction type (e.g., 'DEPOSIT', 'WITHDRAWAL', 'TRADE', 'ORDER')
- * @property {string} amount - Transaction amount (as string or number)
- * @property {string} [currency] - Currency symbol
- * @property {string} [status] - Transaction status
- * @property {string} [createdAt] - Transaction timestamp
- * @property {string} [userId] - Associated user ID
+ * @property {string} symbol - Asset symbol
+ * @property {'BUY'|'SELL'} side - BUY or SELL
+ * @property {number} quantity - Amount of asset traded
+ * @property {number} priceUsd - Executed price in USD
+ * @property {number} totalUsd - Total cost/proceeds in USD
+ * @property {number} feeUsd - Fee in USD
+ * @property {string} createdAt - Transaction timestamp
+ */
+
+/**
+ * @typedef {Object} TransactionPagedResponse
+ * @property {TransactionDto[]} items - Page items
+ * @property {number} total - Total item count
+ * @property {number} page - Current page (0-based)
+ * @property {number} size - Page size
+ * @property {number} totalPages - Total pages
  */

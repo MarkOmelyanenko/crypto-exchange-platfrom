@@ -1,55 +1,397 @@
-import { useState, useEffect } from 'react';
-import { list } from '../shared/api/services/transactionsService';
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { list, getById } from '../shared/api/services/transactionsService';
+
+/* ──────────────────── helpers ──────────────────── */
+
+const fmt = (v, decimals = 2) => {
+  if (v == null || isNaN(Number(v))) return '—';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency', currency: 'USD',
+    minimumFractionDigits: decimals, maximumFractionDigits: decimals,
+  }).format(Number(v));
+};
+
+const fmtQty = (v) => {
+  if (v == null || isNaN(Number(v))) return '—';
+  const n = Number(v);
+  if (n === 0) return '0';
+  return n.toFixed(8).replace(/\.?0+$/, '');
+};
+
+const fmtDate = (d) => {
+  if (!d) return '—';
+  return new Date(d).toLocaleString(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+};
+
+/* ──────────────────── main page ──────────────────── */
 
 function TransactionsPage() {
+  const navigate = useNavigate();
   const [transactions, setTransactions] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Filters
+  const [symbol, setSymbol] = useState('');
+  const [side, setSide] = useState('');
+  const [page, setPage] = useState(0);
+  const [pageSize] = useState(15);
+  const [sortField, setSortField] = useState('createdAt');
+  const [sortDir, setSortDir] = useState('desc');
+
+  // Detail modal
+  const [selectedTx, setSelectedTx] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const fetchTransactions = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const params = { page, size: pageSize, sort: sortField, dir: sortDir };
+      if (symbol.trim()) params.symbol = symbol.trim().toUpperCase();
+      if (side) params.side = side;
+
+      const data = await list(params);
+      setTransactions(data.items || []);
+      setTotal(data.total || 0);
+      setTotalPages(data.totalPages || 0);
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to load transactions.');
+      setTransactions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, pageSize, symbol, side, sortField, sortDir]);
+
   useEffect(() => {
-    const fetchTransactions = async () => {
-      try {
-        const transactionsData = await list();
-        setTransactions(Array.isArray(transactionsData) ? transactionsData : []);
-      } catch (err) {
-        setError(err.response?.data?.message || err.message || 'Failed to load transactions.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchTransactions();
-  }, []);
+  }, [fetchTransactions]);
 
-  if (loading) {
-    return <div>Loading...</div>;
-  }
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('desc');
+    }
+    setPage(0);
+  };
 
-  if (error) {
-    return (
-      <div>
-        <h1>Transactions</h1>
-        <div style={{ color: 'red' }}>{error}</div>
-      </div>
-    );
-  }
+  const handleFilter = () => {
+    setPage(0);
+    fetchTransactions();
+  };
+
+  const handleRowClick = async (tx) => {
+    setDetailLoading(true);
+    try {
+      const detail = await getById(tx.id);
+      setSelectedTx(detail);
+    } catch {
+      setSelectedTx(tx); // fallback to row data
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const sortIcon = (field) => {
+    if (sortField !== field) return '';
+    return sortDir === 'asc' ? ' ↑' : ' ↓';
+  };
 
   return (
-    <div>
-      <h1>Transactions</h1>
-      {transactions.length === 0 ? (
-        <p>No transactions found.</p>
+    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 20, color: '#111827' }}>Transactions</h1>
+
+      {/* ─── Filters ─── */}
+      <div style={styles.filterBar}>
+        <div style={styles.filterGroup}>
+          <label style={styles.filterLabel}>Symbol</label>
+          <input
+            type="text"
+            value={symbol}
+            onChange={(e) => setSymbol(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleFilter()}
+            placeholder="e.g. BTC"
+            style={styles.filterInput}
+          />
+        </div>
+        <div style={styles.filterGroup}>
+          <label style={styles.filterLabel}>Side</label>
+          <select value={side} onChange={(e) => { setSide(e.target.value); setPage(0); }} style={styles.filterSelect}>
+            <option value="">All</option>
+            <option value="BUY">BUY</option>
+            <option value="SELL">SELL</option>
+          </select>
+        </div>
+        <button onClick={handleFilter} style={styles.filterBtn}>Apply</button>
+        <button onClick={() => { setSymbol(''); setSide(''); setPage(0); }} style={styles.clearBtn}>Clear</button>
+      </div>
+
+      {/* ─── Error ─── */}
+      {error && (
+        <div style={styles.errorBox}>
+          <span>{error}</span>
+          <button onClick={fetchTransactions} style={styles.retryBtn}>Retry</button>
+        </div>
+      )}
+
+      {/* ─── Table ─── */}
+      {loading && transactions.length === 0 ? (
+        <Skeleton height={300} />
+      ) : transactions.length === 0 ? (
+        <EmptyState message="No transactions found. Start trading on the Assets page!" />
       ) : (
-        <ul>
-          {transactions.map((transaction) => (
-            <li key={transaction.id}>
-              ID: {transaction.id} - Type: {transaction.type || 'N/A'} - Amount: {transaction.amount || 'N/A'}
-            </li>
-          ))}
-        </ul>
+        <>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <Th align="left" sortable onClick={() => handleSort('createdAt')}>
+                    Date{sortIcon('createdAt')}
+                  </Th>
+                  <Th align="left">Symbol</Th>
+                  <Th align="center">Side</Th>
+                  <Th align="right">Quantity</Th>
+                  <Th align="right">Price</Th>
+                  <Th align="right" sortable onClick={() => handleSort('totalUsd')}>
+                    Total{sortIcon('totalUsd')}
+                  </Th>
+                </tr>
+              </thead>
+              <tbody>
+                {transactions.map((tx) => (
+                  <tr
+                    key={tx.id}
+                    onClick={() => handleRowClick(tx)}
+                    style={{ ...styles.tableRow, cursor: 'pointer' }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fff'}
+                  >
+                    <td style={{ ...styles.td, textAlign: 'left', fontSize: 13, color: '#6b7280' }}>
+                      {fmtDate(tx.createdAt)}
+                    </td>
+                    <td style={{ ...styles.td, textAlign: 'left', fontWeight: 600 }}>{tx.symbol}</td>
+                    <td style={{ ...styles.td, textAlign: 'center' }}>
+                      <SideBadge side={tx.side} />
+                    </td>
+                    <td style={{ ...styles.td, textAlign: 'right', fontFamily: 'monospace' }}>
+                      {fmtQty(tx.quantity)}
+                    </td>
+                    <td style={{ ...styles.td, textAlign: 'right' }}>{fmt(tx.priceUsd)}</td>
+                    <td style={{ ...styles.td, textAlign: 'right', fontWeight: 500 }}>{fmt(tx.totalUsd)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ─── Pagination ─── */}
+          <div style={styles.pagination}>
+            <span style={{ fontSize: 13, color: '#6b7280' }}>
+              Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, total)} of {total}
+            </span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setPage(Math.max(0, page - 1))}
+                disabled={page === 0}
+                style={{ ...styles.pageBtn, opacity: page === 0 ? 0.4 : 1 }}
+              >
+                ← Prev
+              </button>
+              <span style={{ padding: '6px 12px', fontSize: 13, color: '#374151' }}>
+                Page {page + 1} of {totalPages || 1}
+              </span>
+              <button
+                onClick={() => setPage(page + 1)}
+                disabled={page >= totalPages - 1}
+                style={{ ...styles.pageBtn, opacity: page >= totalPages - 1 ? 0.4 : 1 }}
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ─── Detail Modal ─── */}
+      {selectedTx && (
+        <DetailModal tx={selectedTx} loading={detailLoading} onClose={() => setSelectedTx(null)} />
       )}
     </div>
   );
 }
+
+/* ──────────────────── components ──────────────────── */
+
+function SideBadge({ side }) {
+  const isBuy = side === 'BUY';
+  return (
+    <span style={{
+      display: 'inline-block', padding: '2px 10px', borderRadius: 4,
+      fontSize: 11, fontWeight: 700,
+      backgroundColor: isBuy ? '#d1fae5' : '#fee2e2',
+      color: isBuy ? '#065f46' : '#991b1b',
+    }}>
+      {side}
+    </span>
+  );
+}
+
+function Th({ children, align = 'left', sortable, onClick }) {
+  return (
+    <th
+      onClick={onClick}
+      style={{
+        padding: '10px 14px', textAlign: align, fontSize: 12, fontWeight: 600,
+        color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em',
+        borderBottom: '2px solid #e5e7eb', background: '#f9fafb',
+        cursor: sortable ? 'pointer' : 'default', userSelect: 'none', whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </th>
+  );
+}
+
+function DetailModal({ tx, loading, onClose }) {
+  return (
+    <div style={styles.overlay} onClick={onClose}>
+      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0, color: '#111827' }}>Transaction Details</h2>
+          <button onClick={onClose} style={styles.closeBtn}>×</button>
+        </div>
+        {loading ? (
+          <Skeleton height={120} />
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <DetailRow label="ID" value={tx.id} mono />
+            <DetailRow label="Symbol" value={tx.symbol} />
+            <DetailRow label="Side" value={<SideBadge side={tx.side} />} />
+            <DetailRow label="Quantity" value={fmtQty(tx.quantity)} mono />
+            <DetailRow label="Price" value={fmt(tx.priceUsd)} />
+            <DetailRow label="Total" value={fmt(tx.totalUsd)} />
+            <DetailRow label="Fee" value={fmt(tx.feeUsd)} />
+            <DetailRow label="Date" value={fmtDate(tx.createdAt)} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DetailRow({ label, value, mono }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>
+        {label}
+      </div>
+      <div style={{
+        fontSize: 14, fontWeight: 500, color: '#111827',
+        fontFamily: mono ? 'monospace' : 'inherit',
+        wordBreak: 'break-all',
+      }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ message }) {
+  return (
+    <div style={{
+      padding: '48px 20px', textAlign: 'center', backgroundColor: '#f9fafb',
+      borderRadius: 8, border: '1px dashed #d1d5db', color: '#6b7280', fontSize: 14,
+    }}>
+      <p>{message}</p>
+    </div>
+  );
+}
+
+function Skeleton({ height = 40 }) {
+  return (
+    <div style={{
+      height, borderRadius: 8,
+      background: 'linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%)',
+      backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite',
+    }}>
+      <style>{`@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
+    </div>
+  );
+}
+
+/* ──────────────────── styles ──────────────────── */
+
+const styles = {
+  filterBar: {
+    display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap',
+    marginBottom: 20, padding: 16, backgroundColor: '#fff',
+    borderRadius: 8, border: '1px solid #e5e7eb',
+  },
+  filterGroup: { display: 'flex', flexDirection: 'column', gap: 4 },
+  filterLabel: { fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' },
+  filterInput: {
+    padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: 4,
+    fontSize: 13, width: 100, outline: 'none',
+  },
+  filterSelect: {
+    padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: 4,
+    fontSize: 13, minWidth: 80, outline: 'none', backgroundColor: '#fff',
+  },
+  filterBtn: {
+    padding: '6px 16px', backgroundColor: '#3b82f6', color: '#fff',
+    border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 13, fontWeight: 500,
+  },
+  clearBtn: {
+    padding: '6px 16px', backgroundColor: '#f3f4f6', color: '#374151',
+    border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer', fontSize: 13, fontWeight: 500,
+  },
+  errorBox: {
+    padding: 16, backgroundColor: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16,
+    color: '#dc2626', fontSize: 14,
+  },
+  retryBtn: {
+    padding: '6px 14px', backgroundColor: '#dc2626', color: '#fff',
+    border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 13, fontWeight: 500,
+  },
+  table: {
+    width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff',
+    borderRadius: 8, overflow: 'hidden', border: '1px solid #e5e7eb',
+  },
+  tableRow: {
+    borderBottom: '1px solid #f3f4f6', transition: 'background-color 0.15s',
+  },
+  td: { padding: '10px 14px', fontSize: 14 },
+  pagination: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    padding: '12px 0', flexWrap: 'wrap', gap: 8,
+  },
+  pageBtn: {
+    padding: '6px 14px', backgroundColor: '#fff', color: '#374151',
+    border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer',
+    fontSize: 13, fontWeight: 500,
+  },
+  overlay: {
+    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex',
+    justifyContent: 'center', alignItems: 'center', zIndex: 1000,
+  },
+  modal: {
+    backgroundColor: '#fff', borderRadius: 12, padding: 24,
+    width: '100%', maxWidth: 520, boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+  },
+  closeBtn: {
+    background: 'none', border: 'none', fontSize: 24, cursor: 'pointer',
+    color: '#6b7280', lineHeight: 1,
+  },
+};
 
 export default TransactionsPage;

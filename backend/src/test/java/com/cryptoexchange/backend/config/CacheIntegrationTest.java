@@ -95,7 +95,7 @@ class CacheIntegrationTest {
         cacheManager.getCache("portfolio").clear();
 
         // Create test data
-        user = userAccountRepository.save(new UserAccount("test@example.com"));
+        user = userAccountRepository.save(new UserAccount("cachetest", "test@example.com", "passwordhash"));
         usdt = assetRepository.findBySymbol("USDT")
             .orElseGet(() -> assetRepository.save(new Asset("USDT", "Tether", 2)));
     }

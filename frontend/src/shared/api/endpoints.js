@@ -17,6 +17,7 @@ export const ENDPOINTS = {
   },
   transactions: {
     list: '/api/transactions',
+    create: '/api/transactions',
     byId: (id) => `/api/transactions/${id}`,
   },
   dashboard: {

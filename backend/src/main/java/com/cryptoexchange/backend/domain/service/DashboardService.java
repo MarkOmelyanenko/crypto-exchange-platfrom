@@ -27,6 +27,7 @@ public class DashboardService {
     private final BalanceRepository balanceRepository;
     private final TradeRepository tradeRepository;
     private final OrderRepository orderRepository;
+    private final TransactionRepository transactionRepository;
     private final AssetService assetService;
     private final MarketService marketService;
     private final MarketTickRepository marketTickRepository;
@@ -36,6 +37,7 @@ public class DashboardService {
     public DashboardService(BalanceRepository balanceRepository,
                            TradeRepository tradeRepository,
                            OrderRepository orderRepository,
+                           TransactionRepository transactionRepository,
                            AssetService assetService,
                            MarketService marketService,
                            MarketTickRepository marketTickRepository,
@@ -44,6 +46,7 @@ public class DashboardService {
         this.balanceRepository = balanceRepository;
         this.tradeRepository = tradeRepository;
         this.orderRepository = orderRepository;
+        this.transactionRepository = transactionRepository;
         this.assetService = assetService;
         this.marketService = marketService;
         this.marketTickRepository = marketTickRepository;
@@ -179,41 +182,62 @@ public class DashboardService {
     }
 
     /**
-     * Get recent transactions for user (paginated at DB level for efficiency).
+     * Get recent transactions for user — merges legacy Orders and new Transaction records,
+     * sorted by date descending, limited to {@code limit} entries.
      */
     @Transactional(readOnly = true)
     public List<TransactionSummary> getRecentTransactions(UUID userId, int limit) {
+        List<TransactionSummary> summaries = new ArrayList<>();
+
+        // 1) New Transaction entity records
+        Page<Transaction> txPage = transactionRepository.findAllByUserId(
+                userId,
+                PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt")));
+
+        for (Transaction tx : txPage.getContent()) {
+            summaries.add(new TransactionSummary(
+                tx.getId(),
+                tx.getSide().name(),
+                tx.getAssetSymbol(),
+                tx.getQuantity(),
+                tx.getPriceUsd().setScale(2, RoundingMode.HALF_UP),
+                tx.getCreatedAt(),
+                "COMPLETED" // MVP transactions are always immediately completed
+            ));
+        }
+
+        // 2) Legacy Order-based records
         Page<Order> ordersPage = orderRepository.findAllByUserId(
                 userId,
                 PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt")));
 
-        return ordersPage.getContent().stream()
-            .map(order -> {
-                Market market = order.getMarket();
-                Asset baseAsset = market.getBaseAsset();
-                String symbol = baseAsset.getSymbol();
-                String type = order.getSide().name();
+        for (Order order : ordersPage.getContent()) {
+            Market market = order.getMarket();
+            Asset baseAsset = market.getBaseAsset();
+            String symbol = baseAsset.getSymbol();
+            String type = order.getSide().name();
 
-                // Show filledAmount for filled orders, otherwise the original order amount
-                BigDecimal quantity = order.getFilledAmount().compareTo(BigDecimal.ZERO) > 0
-                        ? order.getFilledAmount()
-                        : order.getAmount();
-                BigDecimal price = order.getPrice() != null ? order.getPrice() : BigDecimal.ZERO;
+            BigDecimal quantity = order.getFilledAmount().compareTo(BigDecimal.ZERO) > 0
+                    ? order.getFilledAmount()
+                    : order.getAmount();
+            BigDecimal price = order.getPrice() != null ? order.getPrice() : BigDecimal.ZERO;
 
-                // Map internal statuses to user-friendly labels
-                String status = mapOrderStatus(order.getStatus());
+            String status = mapOrderStatus(order.getStatus());
 
-                return new TransactionSummary(
-                    order.getId(),
-                    type,
-                    symbol,
-                    quantity.setScale(baseAsset.getScale(), RoundingMode.HALF_UP),
-                    price.setScale(2, RoundingMode.HALF_UP),
-                    order.getCreatedAt(),
-                    status
-                );
-            })
-            .collect(Collectors.toList());
+            summaries.add(new TransactionSummary(
+                order.getId(),
+                type,
+                symbol,
+                quantity.setScale(baseAsset.getScale(), RoundingMode.HALF_UP),
+                price.setScale(2, RoundingMode.HALF_UP),
+                order.getCreatedAt(),
+                status
+            ));
+        }
+
+        // Sort merged list by timestamp descending & limit
+        summaries.sort(Comparator.comparing((TransactionSummary s) -> s.timestamp).reversed());
+        return summaries.stream().limit(limit).collect(Collectors.toList());
     }
 
     private String mapOrderStatus(OrderStatus status) {
@@ -226,29 +250,23 @@ public class DashboardService {
     }
 
     /**
-     * Calculate average buy price for an asset using weighted average cost basis
-     * Simplified: tracks net position and cost basis
+     * Calculate average buy price for an asset using weighted average cost basis.
+     * Combines legacy Trade records (order-matching engine) and new Transaction records
+     * (instant buy/sell), sorted chronologically to maintain correct cost basis.
      */
     private BigDecimal calculateAverageBuyPrice(UUID userId, UUID assetId) {
-        // Find all markets where this asset is the base
+        BigDecimal totalQuantity = BigDecimal.ZERO;
+        BigDecimal totalCost = BigDecimal.ZERO;
+
+        // ── 1) Legacy Trade records (order-matching engine) ──
         List<Market> markets = marketService.listActiveMarkets().stream()
             .filter(m -> m.getBaseAsset().getId().equals(assetId))
             .collect(Collectors.toList());
 
-        if (markets.isEmpty()) {
-            return BigDecimal.ZERO;
-        }
-
-        BigDecimal totalQuantity = BigDecimal.ZERO;
-        BigDecimal totalCost = BigDecimal.ZERO;
-
-        // Process all trades chronologically to calculate cost basis
         List<Trade> allTrades = new ArrayList<>();
         for (Market market : markets) {
             allTrades.addAll(tradeRepository.findAllByMarketIdOrderByExecutedAtDesc(market.getId()));
         }
-        
-        // Sort by execution time (oldest first for FIFO)
         allTrades.sort(Comparator.comparing(Trade::getExecutedAt));
 
         for (Trade trade : allTrades) {
@@ -260,27 +278,47 @@ public class DashboardService {
                 : trade.getTakerOrder();
 
             if (buyerOrder.getUser().getId().equals(userId)) {
-                // User bought - add to cost basis
                 BigDecimal qty = trade.getAmount();
                 BigDecimal cost = trade.getQuoteAmount();
                 totalQuantity = totalQuantity.add(qty);
                 totalCost = totalCost.add(cost);
             } else if (sellerOrder.getUser().getId().equals(userId)) {
-                // User sold - reduce quantity and cost basis using average cost
                 BigDecimal qty = trade.getAmount();
                 if (totalQuantity.compareTo(BigDecimal.ZERO) > 0) {
                     BigDecimal avgCost = totalCost.divide(totalQuantity, MC);
                     BigDecimal costToRemove = qty.multiply(avgCost, MC);
                     totalQuantity = totalQuantity.subtract(qty);
                     totalCost = totalCost.subtract(costToRemove);
-                    if (totalQuantity.compareTo(BigDecimal.ZERO) < 0) {
-                        totalQuantity = BigDecimal.ZERO;
-                    }
-                    if (totalCost.compareTo(BigDecimal.ZERO) < 0) {
-                        totalCost = BigDecimal.ZERO;
+                    if (totalQuantity.compareTo(BigDecimal.ZERO) < 0) totalQuantity = BigDecimal.ZERO;
+                    if (totalCost.compareTo(BigDecimal.ZERO) < 0) totalCost = BigDecimal.ZERO;
+                }
+            }
+        }
+
+        // ── 2) New Transaction records (instant buy/sell) ──
+        try {
+            Asset asset = assetService.getAsset(assetId);
+            Page<Transaction> txPage = transactionRepository.findFiltered(
+                    userId, asset.getSymbol(), null, null, null,
+                    PageRequest.of(0, 1000, Sort.by(Sort.Direction.ASC, "createdAt")));
+
+            for (Transaction tx : txPage.getContent()) {
+                if (tx.getSide() == OrderSide.BUY) {
+                    totalQuantity = totalQuantity.add(tx.getQuantity());
+                    totalCost = totalCost.add(tx.getTotalUsd());
+                } else { // SELL
+                    if (totalQuantity.compareTo(BigDecimal.ZERO) > 0) {
+                        BigDecimal avgCost = totalCost.divide(totalQuantity, MC);
+                        BigDecimal costToRemove = tx.getQuantity().multiply(avgCost, MC);
+                        totalQuantity = totalQuantity.subtract(tx.getQuantity());
+                        totalCost = totalCost.subtract(costToRemove);
+                        if (totalQuantity.compareTo(BigDecimal.ZERO) < 0) totalQuantity = BigDecimal.ZERO;
+                        if (totalCost.compareTo(BigDecimal.ZERO) < 0) totalCost = BigDecimal.ZERO;
                     }
                 }
             }
+        } catch (Exception e) {
+            log.debug("Could not load Transaction records for asset {}: {}", assetId, e.getMessage());
         }
 
         if (totalQuantity.compareTo(BigDecimal.ZERO) > 0) {
@@ -290,20 +328,18 @@ public class DashboardService {
     }
 
     /**
-     * Calculate realized PnL from completed sell trades
+     * Calculate realized PnL from completed sell trades and sell transactions.
      * Uses average cost method: when selling, realized PnL = (sellPrice - avgCost) * quantity
      */
     private BigDecimal calculateRealizedPnl(UUID userId) {
         List<Market> markets = marketService.listActiveMarkets();
         BigDecimal totalRealizedPnl = BigDecimal.ZERO;
 
+        // ── 1) Legacy Trade records per market ──
         for (Market market : markets) {
             List<Trade> trades = tradeRepository.findAllByMarketIdOrderByExecutedAtDesc(market.getId());
-            
-            // Sort chronologically (oldest first)
             trades.sort(Comparator.comparing(Trade::getExecutedAt));
-            
-            // Track cost basis as we process trades chronologically
+
             BigDecimal costBasis = BigDecimal.ZERO;
             BigDecimal quantity = BigDecimal.ZERO;
 
@@ -316,34 +352,59 @@ public class DashboardService {
                     : trade.getTakerOrder();
 
                 if (buyerOrder.getUser().getId().equals(userId)) {
-                    // User bought - update cost basis
                     BigDecimal qty = trade.getAmount();
                     BigDecimal cost = trade.getQuoteAmount();
                     costBasis = costBasis.add(cost);
                     quantity = quantity.add(qty);
                 } else if (sellerOrder.getUser().getId().equals(userId)) {
-                    // User sold - calculate realized PnL
                     BigDecimal qty = trade.getAmount();
                     BigDecimal sellProceeds = trade.getQuoteAmount();
-                    
                     if (quantity.compareTo(BigDecimal.ZERO) > 0) {
                         BigDecimal avgCost = costBasis.divide(quantity, MC);
                         BigDecimal costOfSold = qty.multiply(avgCost, MC);
-                        BigDecimal realizedPnl = sellProceeds.subtract(costOfSold, MC);
-                        totalRealizedPnl = totalRealizedPnl.add(realizedPnl);
-                        
-                        // Update cost basis
+                        totalRealizedPnl = totalRealizedPnl.add(sellProceeds.subtract(costOfSold, MC));
                         costBasis = costBasis.subtract(costOfSold, MC);
                         quantity = quantity.subtract(qty, MC);
-                        if (quantity.compareTo(BigDecimal.ZERO) < 0) {
-                            quantity = BigDecimal.ZERO;
-                        }
-                        if (costBasis.compareTo(BigDecimal.ZERO) < 0) {
-                            costBasis = BigDecimal.ZERO;
+                        if (quantity.compareTo(BigDecimal.ZERO) < 0) quantity = BigDecimal.ZERO;
+                        if (costBasis.compareTo(BigDecimal.ZERO) < 0) costBasis = BigDecimal.ZERO;
+                    }
+                }
+            }
+        }
+
+        // ── 2) New Transaction records (all assets at once) ──
+        try {
+            Page<Transaction> txPage = transactionRepository.findFiltered(
+                    userId, null, null, null, null,
+                    PageRequest.of(0, 5000, Sort.by(Sort.Direction.ASC, "createdAt")));
+
+            // Group by asset symbol and process per-asset cost basis
+            Map<String, List<Transaction>> byAsset = txPage.getContent().stream()
+                    .collect(Collectors.groupingBy(Transaction::getAssetSymbol));
+
+            for (Map.Entry<String, List<Transaction>> entry : byAsset.entrySet()) {
+                BigDecimal costBasis = BigDecimal.ZERO;
+                BigDecimal quantity = BigDecimal.ZERO;
+
+                for (Transaction tx : entry.getValue()) {
+                    if (tx.getSide() == OrderSide.BUY) {
+                        costBasis = costBasis.add(tx.getTotalUsd());
+                        quantity = quantity.add(tx.getQuantity());
+                    } else { // SELL
+                        if (quantity.compareTo(BigDecimal.ZERO) > 0) {
+                            BigDecimal avgCost = costBasis.divide(quantity, MC);
+                            BigDecimal costOfSold = tx.getQuantity().multiply(avgCost, MC);
+                            totalRealizedPnl = totalRealizedPnl.add(tx.getTotalUsd().subtract(costOfSold, MC));
+                            costBasis = costBasis.subtract(costOfSold, MC);
+                            quantity = quantity.subtract(tx.getQuantity(), MC);
+                            if (quantity.compareTo(BigDecimal.ZERO) < 0) quantity = BigDecimal.ZERO;
+                            if (costBasis.compareTo(BigDecimal.ZERO) < 0) costBasis = BigDecimal.ZERO;
                         }
                     }
                 }
             }
+        } catch (Exception e) {
+            log.debug("Could not calculate realized PnL from Transaction records: {}", e.getMessage());
         }
 
         return totalRealizedPnl;
