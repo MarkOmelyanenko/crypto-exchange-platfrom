@@ -1,6 +1,8 @@
 package com.cryptoexchange.backend.domain.controller;
 
 import com.cryptoexchange.backend.config.JwtService;
+import com.cryptoexchange.backend.config.RateLimitProperties;
+import com.cryptoexchange.backend.config.RateLimitService;
 import com.cryptoexchange.backend.domain.model.UserAccount;
 import com.cryptoexchange.backend.domain.service.AuthService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,6 +35,12 @@ class AuthControllerTest {
 
     @MockitoBean
     private JwtService jwtService;
+
+    @MockitoBean
+    private RateLimitService rateLimitService;
+
+    @MockitoBean
+    private RateLimitProperties rateLimitProperties;
 
     @Test
     void register_Success() throws Exception {

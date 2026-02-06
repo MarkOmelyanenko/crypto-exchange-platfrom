@@ -1,5 +1,8 @@
 package com.cryptoexchange.backend.domain.controller;
 
+import com.cryptoexchange.backend.config.JwtService;
+import com.cryptoexchange.backend.config.RateLimitProperties;
+import com.cryptoexchange.backend.config.RateLimitService;
 import com.cryptoexchange.backend.domain.model.UserAccount;
 import com.cryptoexchange.backend.domain.service.UserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,6 +36,15 @@ class UserControllerTest {
 
     @MockitoBean
     private UserService userService;
+
+    @MockitoBean
+    private JwtService jwtService;
+
+    @MockitoBean
+    private RateLimitService rateLimitService;
+
+    @MockitoBean
+    private RateLimitProperties rateLimitProperties;
 
     private static final UUID USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
