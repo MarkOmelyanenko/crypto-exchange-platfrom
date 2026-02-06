@@ -1,9 +1,46 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { getSummary, getHoldings, getRecentTransactions } from '../shared/api/services/dashboardService';
-import { getSnapshot, getHistory } from '../shared/api/services/priceService';
+import { getHistory } from '../shared/api/services/priceService';
 import { getHealth } from '../shared/api/services/systemService';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+} from 'recharts';
+
+/* ──────────────────── helpers ──────────────────── */
+
+const fmt = (v, decimals = 2) => {
+  if (v == null || isNaN(Number(v))) return '—';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency', currency: 'USD',
+    minimumFractionDigits: decimals, maximumFractionDigits: decimals,
+  }).format(Number(v));
+};
+
+const fmtPct = (v) => {
+  if (v == null || isNaN(Number(v))) return '—';
+  const n = Number(v);
+  return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
+};
+
+const fmtDate = (d) => {
+  if (!d) return '—';
+  return new Date(d).toLocaleString(undefined, {
+    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+};
+
+const fmtQty = (v, maxDecimals = 8) => {
+  if (v == null || isNaN(Number(v))) return '—';
+  const n = Number(v);
+  if (n === 0) return '0';
+  // Remove trailing zeros
+  return n.toFixed(maxDecimals).replace(/\.?0+$/, '');
+};
+
+const pnlColor = (v) => Number(v) >= 0 ? '#10b981' : '#ef4444';
+
+/* ──────────────────── main page ──────────────────── */
 
 function DashboardPage() {
   const [summary, setSummary] = useState(null);
@@ -11,286 +48,251 @@ function DashboardPage() {
   const [transactions, setTransactions] = useState([]);
   const [priceHistory, setPriceHistory] = useState([]);
   const [systemHealth, setSystemHealth] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState({
+    summary: true, holdings: true, transactions: true, chart: true, health: true,
+  });
   const [errors, setErrors] = useState({});
+  const holdingsRef = useRef([]);
 
-  useEffect(() => {
-    loadDashboardData();
-    // Poll for price updates every 10 seconds
-    const interval = setInterval(() => {
-      loadPriceData();
-    }, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const loadDashboardData = async () => {
-    setLoading(true);
+  const loadDashboardData = useCallback(async () => {
+    setLoading({ summary: true, holdings: true, transactions: true, chart: true, health: true });
     setErrors({});
 
-    try {
-      const [summaryData, holdingsData, transactionsData, healthData] = await Promise.all([
-        getSummary().catch(err => ({ error: err })),
-        getHoldings().catch(err => ({ error: err })),
-        getRecentTransactions(10).catch(err => ({ error: err })),
-        getHealth().catch(err => ({ error: err }))
-      ]);
+    const results = await Promise.allSettled([
+      getSummary(),
+      getHoldings(),
+      getRecentTransactions(10),
+      getHealth(),
+    ]);
 
-      if (!summaryData.error) setSummary(summaryData);
-      else setErrors(prev => ({ ...prev, summary: summaryData.error }));
+    const [summaryR, holdingsR, txR, healthR] = results;
 
-      if (!holdingsData.error) setHoldings(holdingsData);
-      else setErrors(prev => ({ ...prev, holdings: holdingsData.error }));
-
-      if (!transactionsData.error) setTransactions(transactionsData);
-      else setErrors(prev => ({ ...prev, transactions: transactionsData.error }));
-
-      if (!healthData.error) setSystemHealth(healthData);
-      else setErrors(prev => ({ ...prev, health: healthData.error }));
-
-      // Load price data for top holdings
-      if (!holdingsData.error && holdingsData.length > 0) {
-        loadPriceData(holdingsData);
-      }
-    } catch (err) {
-      setErrors({ general: err.message || 'Failed to load dashboard data' });
-    } finally {
-      setLoading(false);
+    if (summaryR.status === 'fulfilled') {
+      setSummary(summaryR.value);
+    } else {
+      setErrors(prev => ({ ...prev, summary: summaryR.reason }));
     }
-  };
+    setLoading(prev => ({ ...prev, summary: false }));
 
-  const loadPriceData = async (holdingsData = holdings) => {
+    if (holdingsR.status === 'fulfilled') {
+      setHoldings(holdingsR.value);
+      holdingsRef.current = holdingsR.value;
+    } else {
+      setErrors(prev => ({ ...prev, holdings: holdingsR.reason }));
+    }
+    setLoading(prev => ({ ...prev, holdings: false }));
+
+    if (txR.status === 'fulfilled') {
+      setTransactions(txR.value);
+    } else {
+      setErrors(prev => ({ ...prev, transactions: txR.reason }));
+    }
+    setLoading(prev => ({ ...prev, transactions: false }));
+
+    if (healthR.status === 'fulfilled') {
+      setSystemHealth(healthR.value);
+    } else {
+      setErrors(prev => ({ ...prev, health: healthR.reason }));
+    }
+    setLoading(prev => ({ ...prev, health: false }));
+
+    // Load price charts
+    const h = holdingsR.status === 'fulfilled' ? holdingsR.value : [];
+    await loadPriceData(h);
+  }, []);
+
+  const loadPriceData = useCallback(async (holdingsData) => {
+    setLoading(prev => ({ ...prev, chart: true }));
     try {
-      // Get top 3-5 assets by market value, or fallback to BTC, ETH, SOL
-      const topSymbols = holdingsData.length > 0
-        ? holdingsData
-            .sort((a, b) => b.marketValueUsd - a.marketValueUsd)
+      const symbols = holdingsData && holdingsData.length > 0
+        ? [...holdingsData]
+            .sort((a, b) => Number(b.marketValueUsd) - Number(a.marketValueUsd))
             .slice(0, 5)
             .map(h => h.symbol)
         : ['BTC', 'ETH', 'SOL'];
 
-      const historyPromises = topSymbols.slice(0, 3).map(symbol =>
-        getHistory(symbol, '24h').then(data => ({ symbol, data }))
+      const chartSymbols = symbols.slice(0, 3);
+      const histories = await Promise.all(
+        chartSymbols.map(sym =>
+          getHistory(sym, '24h')
+            .then(data => ({ symbol: sym, data: data || [] }))
+            .catch(() => ({ symbol: sym, data: [] }))
+        )
       );
 
-      const histories = await Promise.all(historyPromises);
-      setPriceHistory(histories);
-    } catch (err) {
-      console.error('Failed to load price history:', err);
+      setPriceHistory(histories.filter(h => h.data.length > 0));
+    } catch {
+      // Silently fail; chart will show "no data"
+    } finally {
+      setLoading(prev => ({ ...prev, chart: false }));
     }
-  };
+  }, []);
 
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(value);
-  };
-
-  const formatPercent = (value) => {
-    return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
-  };
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleString();
-  };
-
-  if (loading && !summary) {
-    return (
-      <div style={{ padding: '20px' }}>
-        <h1>Dashboard</h1>
-        <div>Loading...</div>
-      </div>
-    );
-  }
+  // Polling: refresh prices every 10s
+  useEffect(() => {
+    loadDashboardData();
+    const interval = setInterval(() => {
+      loadPriceData(holdingsRef.current);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [loadDashboardData, loadPriceData]);
 
   return (
-    <div style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
-      <h1>Dashboard</h1>
+    <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 24, color: '#111827' }}>Dashboard</h1>
 
-      {/* Portfolio Summary Cards */}
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
-        gap: '20px', 
-        marginBottom: '30px' 
-      }}>
-        <SummaryCard
-          title="Total Portfolio Value"
-          value={summary ? formatCurrency(summary.totalValueUsd) : '—'}
-          loading={loading && !summary}
-        />
-        <SummaryCard
-          title="Available Cash"
-          value={summary ? formatCurrency(summary.availableCashUsd) : '—'}
-          loading={loading && !summary}
-        />
-        <SummaryCard
-          title="Unrealized PnL"
-          value={summary ? `${formatCurrency(summary.unrealizedPnlUsd)} (${formatPercent(summary.unrealizedPnlPercent)})` : '—'}
-          color={summary && summary.unrealizedPnlUsd >= 0 ? '#10b981' : '#ef4444'}
-          loading={loading && !summary}
-        />
-        <SummaryCard
-          title="Realized PnL"
-          value={summary ? formatCurrency(summary.realizedPnlUsd) : '—'}
-          color={summary && summary.realizedPnlUsd >= 0 ? '#10b981' : '#ef4444'}
-          loading={loading && !summary}
-        />
-      </div>
+      {/* ─── Summary Cards ─── */}
+      {errors.summary ? (
+        <ErrorBox message="Failed to load portfolio summary" onRetry={loadDashboardData} />
+      ) : (
+        <div style={styles.cardGrid}>
+          <SummaryCard label="Total Portfolio Value" value={fmt(summary?.totalValueUsd)} loading={loading.summary} />
+          <SummaryCard label="Available Cash (USD)" value={fmt(summary?.availableCashUsd)} loading={loading.summary} />
+          <SummaryCard
+            label="Unrealized PnL"
+            value={summary ? `${fmt(summary.unrealizedPnlUsd)}  ${fmtPct(summary.unrealizedPnlPercent)}` : null}
+            valueColor={summary ? pnlColor(summary.unrealizedPnlUsd) : undefined}
+            loading={loading.summary}
+          />
+          <SummaryCard
+            label="Realized PnL"
+            value={summary ? fmt(summary.realizedPnlUsd) : null}
+            valueColor={summary ? pnlColor(summary.realizedPnlUsd) : undefined}
+            loading={loading.summary}
+          />
+        </div>
+      )}
 
-      {/* Holdings Table */}
-      <div style={{ marginBottom: '30px' }}>
-        <h2>Holdings</h2>
+      {/* ─── Holdings Table ─── */}
+      <Section title="Holdings">
         {errors.holdings ? (
-          <ErrorBox error={errors.holdings} onRetry={() => loadDashboardData()} />
+          <ErrorBox message="Failed to load holdings" onRetry={loadDashboardData} />
         ) : (
-          <HoldingsTable holdings={holdings} loading={loading} />
+          <HoldingsTable holdings={holdings} loading={loading.holdings} />
         )}
-      </div>
+      </Section>
 
-      {/* Price Chart and Recent Transactions */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px', marginBottom: '30px' }}>
-        <div>
-          <h2>Price Trends (24h)</h2>
-          {priceHistory.length > 0 ? (
-            <PriceChart data={priceHistory} />
+      {/* ─── Price Charts + Recent Transactions (side by side) ─── */}
+      <div style={styles.splitGrid}>
+        <Section title="Price Trends (24h)">
+          {loading.chart && priceHistory.length === 0 ? (
+            <Skeleton height={300} />
+          ) : priceHistory.length > 0 ? (
+            <PriceCharts data={priceHistory} />
           ) : (
-            <div style={{ padding: '40px', textAlign: 'center', backgroundColor: '#f3f4f6', borderRadius: '8px' }}>
-              {loading ? 'Loading chart...' : 'No price data available'}
-            </div>
+            <EmptyState message="No price data available yet. Data will appear once Binance prices are fetched." />
           )}
-        </div>
-        <div>
-          <h2>Recent Transactions</h2>
+        </Section>
+
+        <Section title="Recent Transactions">
           {errors.transactions ? (
-            <ErrorBox error={errors.transactions} onRetry={() => loadDashboardData()} />
+            <ErrorBox message="Failed to load transactions" onRetry={loadDashboardData} />
           ) : (
-            <TransactionsList transactions={transactions} loading={loading} />
+            <TransactionsList transactions={transactions} loading={loading.transactions} />
           )}
-        </div>
+        </Section>
       </div>
 
-      {/* System Status */}
-      <div style={{ marginBottom: '30px' }}>
-        <h2>System Status</h2>
-        {systemHealth ? (
+      {/* ─── System Status ─── */}
+      <Section title="System Status">
+        {errors.health ? (
+          <ErrorBox message="Failed to load system status" onRetry={loadDashboardData} />
+        ) : loading.health ? (
+          <Skeleton height={60} />
+        ) : systemHealth ? (
           <SystemStatusWidget health={systemHealth} />
         ) : (
-          <div style={{ padding: '20px', backgroundColor: '#f3f4f6', borderRadius: '8px' }}>
-            {loading ? 'Loading...' : 'Status unavailable'}
-          </div>
+          <EmptyState message="Status unavailable" />
         )}
-      </div>
+      </Section>
     </div>
   );
 }
 
-function SummaryCard({ title, value, color, loading }) {
+/* ──────────────────── components ──────────────────── */
+
+function Section({ title, children }) {
   return (
-    <div style={{
-      padding: '20px',
-      backgroundColor: '#fff',
-      borderRadius: '8px',
-      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-      border: '1px solid #e5e7eb'
-    }}>
-      <div style={{ fontSize: '14px', color: '#6b7280', marginBottom: '8px' }}>{title}</div>
-      <div style={{ fontSize: '24px', fontWeight: 'bold', color: color || '#111827' }}>
-        {loading ? '...' : value}
-      </div>
+    <div style={{ marginBottom: 28 }}>
+      <h2 style={{ fontSize: 18, fontWeight: 600, color: '#374151', marginBottom: 12 }}>{title}</h2>
+      {children}
+    </div>
+  );
+}
+
+function SummaryCard({ label, value, valueColor, loading }) {
+  return (
+    <div style={styles.card}>
+      <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 6, letterSpacing: '0.02em' }}>{label}</div>
+      {loading ? (
+        <div style={styles.skeletonBar} />
+      ) : (
+        <div style={{ fontSize: 22, fontWeight: 700, color: valueColor || '#111827', lineHeight: 1.3 }}>
+          {value ?? '—'}
+        </div>
+      )}
     </div>
   );
 }
 
 function HoldingsTable({ holdings, loading }) {
   const [sortBy, setSortBy] = useState('marketValue');
-  const [sortOrder, setSortOrder] = useState('desc');
-
-  const sortedHoldings = [...holdings].sort((a, b) => {
-    const aVal = sortBy === 'marketValue' ? a.marketValueUsd : a.unrealizedPnlUsd;
-    const bVal = sortBy === 'marketValue' ? b.marketValueUsd : b.unrealizedPnlUsd;
-    return sortOrder === 'desc' ? bVal - aVal : aVal - bVal;
-  });
+  const [sortAsc, setSortAsc] = useState(false);
 
   const handleSort = (field) => {
-    if (sortBy === field) {
-      setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc');
-    } else {
-      setSortBy(field);
-      setSortOrder('desc');
-    }
+    if (sortBy === field) setSortAsc(!sortAsc);
+    else { setSortBy(field); setSortAsc(false); }
   };
 
-  if (loading && holdings.length === 0) {
-    return <div style={{ padding: '40px', textAlign: 'center' }}>Loading holdings...</div>;
-  }
+  const sorted = [...holdings].sort((a, b) => {
+    const av = sortBy === 'marketValue' ? Number(a.marketValueUsd) : Number(a.unrealizedPnlUsd);
+    const bv = sortBy === 'marketValue' ? Number(b.marketValueUsd) : Number(b.unrealizedPnlUsd);
+    return sortAsc ? av - bv : bv - av;
+  });
+
+  if (loading && holdings.length === 0) return <Skeleton height={120} />;
 
   if (holdings.length === 0) {
     return (
-      <div style={{ padding: '40px', textAlign: 'center', backgroundColor: '#f3f4f6', borderRadius: '8px' }}>
-        <p style={{ marginBottom: '20px' }}>No holdings yet</p>
-        <Link to="/assets" style={{
-          display: 'inline-block',
-          padding: '10px 20px',
-          backgroundColor: '#007bff',
-          color: 'white',
-          textDecoration: 'none',
-          borderRadius: '4px'
-        }}>
-          Buy your first asset
-        </Link>
-      </div>
+      <EmptyState message="No holdings yet. Start trading to see your portfolio here.">
+        <Link to="/assets" style={styles.primaryBtn}>Browse Assets</Link>
+      </EmptyState>
     );
   }
 
+  const sortIcon = (field) => sortBy === field ? (sortAsc ? ' ↑' : ' ↓') : '';
+
   return (
     <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: '8px' }}>
+      <table style={styles.table}>
         <thead>
-          <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
-            <th style={{ padding: '12px', textAlign: 'left' }}>Asset</th>
-            <th style={{ padding: '12px', textAlign: 'right' }}>Quantity</th>
-            <th style={{ padding: '12px', textAlign: 'right' }}>Avg Buy Price</th>
-            <th style={{ padding: '12px', textAlign: 'right' }}>Current Price</th>
-            <th 
-              style={{ padding: '12px', textAlign: 'right', cursor: 'pointer' }}
-              onClick={() => handleSort('marketValue')}
-            >
-              Market Value {sortBy === 'marketValue' && (sortOrder === 'desc' ? '↓' : '↑')}
-            </th>
-            <th 
-              style={{ padding: '12px', textAlign: 'right', cursor: 'pointer' }}
-              onClick={() => handleSort('pnl')}
-            >
-              Unrealized PnL {sortBy === 'pnl' && (sortOrder === 'desc' ? '↓' : '↑')}
-            </th>
+          <tr>
+            <Th align="left">Asset</Th>
+            <Th align="right">Quantity</Th>
+            <Th align="right">Avg Buy Price</Th>
+            <Th align="right">Current Price</Th>
+            <Th align="right" sortable onClick={() => handleSort('marketValue')}>
+              Market Value{sortIcon('marketValue')}
+            </Th>
+            <Th align="right" sortable onClick={() => handleSort('pnl')}>
+              Unrealized PnL{sortIcon('pnl')}
+            </Th>
           </tr>
         </thead>
         <tbody>
-          {sortedHoldings.map((holding) => (
-            <tr key={holding.assetId} style={{ borderBottom: '1px solid #e5e7eb' }}>
-              <td style={{ padding: '12px' }}>
-                <div style={{ fontWeight: 'bold' }}>{holding.symbol}</div>
-                <div style={{ fontSize: '12px', color: '#6b7280' }}>{holding.name}</div>
+          {sorted.map((h) => (
+            <tr key={h.assetId} style={styles.tableRow}>
+              <td style={{ ...styles.td, textAlign: 'left' }}>
+                <span style={{ fontWeight: 600 }}>{h.symbol}</span>
+                <span style={{ fontSize: 12, color: '#6b7280', marginLeft: 6 }}>{h.name}</span>
               </td>
-              <td style={{ padding: '12px', textAlign: 'right' }}>{holding.quantity.toFixed(8)}</td>
-              <td style={{ padding: '12px', textAlign: 'right' }}>
-                ${holding.avgBuyPriceUsd.toFixed(2)}
-              </td>
-              <td style={{ padding: '12px', textAlign: 'right' }}>
-                ${holding.currentPriceUsd.toFixed(2)}
-              </td>
-              <td style={{ padding: '12px', textAlign: 'right' }}>
-                ${holding.marketValueUsd.toFixed(2)}
-              </td>
-              <td style={{ 
-                padding: '12px', 
-                textAlign: 'right',
-                color: holding.unrealizedPnlUsd >= 0 ? '#10b981' : '#ef4444'
-              }}>
-                ${holding.unrealizedPnlUsd.toFixed(2)} ({formatPercent(holding.unrealizedPnlPercent)})
+              <td style={{ ...styles.td, textAlign: 'right', fontFamily: 'monospace' }}>{fmtQty(h.quantity)}</td>
+              <td style={{ ...styles.td, textAlign: 'right' }}>{fmt(h.avgBuyPriceUsd)}</td>
+              <td style={{ ...styles.td, textAlign: 'right' }}>{fmt(h.currentPriceUsd)}</td>
+              <td style={{ ...styles.td, textAlign: 'right', fontWeight: 500 }}>{fmt(h.marketValueUsd)}</td>
+              <td style={{ ...styles.td, textAlign: 'right', color: pnlColor(h.unrealizedPnlUsd), fontWeight: 500 }}>
+                {fmt(h.unrealizedPnlUsd)}{' '}
+                <span style={{ fontSize: 12 }}>({fmtPct(h.unrealizedPnlPercent)})</span>
               </td>
             </tr>
           ))}
@@ -300,127 +302,170 @@ function HoldingsTable({ holdings, loading }) {
   );
 }
 
+function Th({ children, align = 'left', sortable, onClick }) {
+  return (
+    <th
+      onClick={onClick}
+      style={{
+        padding: '10px 14px', textAlign: align, fontSize: 12, fontWeight: 600,
+        color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em',
+        borderBottom: '2px solid #e5e7eb', background: '#f9fafb',
+        cursor: sortable ? 'pointer' : 'default', userSelect: 'none', whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </th>
+  );
+}
+
 function TransactionsList({ transactions, loading }) {
-  if (loading && transactions.length === 0) {
-    return <div style={{ padding: '20px' }}>Loading transactions...</div>;
-  }
+  if (loading && transactions.length === 0) return <Skeleton height={200} />;
 
   if (transactions.length === 0) {
-    return (
-      <div style={{ padding: '20px', backgroundColor: '#f3f4f6', borderRadius: '8px', textAlign: 'center' }}>
-        No recent transactions
-      </div>
-    );
+    return <EmptyState message="No recent transactions" />;
   }
 
   return (
-    <div style={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-      {transactions.map((tx) => (
-        <div key={tx.id} style={{ 
-          padding: '12px', 
-          borderBottom: '1px solid #e5e7eb',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
+    <div style={styles.card}>
+      {transactions.map((tx, i) => (
+        <div key={tx.id || i} style={{
+          padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          borderBottom: i < transactions.length - 1 ? '1px solid #f3f4f6' : 'none',
         }}>
           <div>
-            <div style={{ fontWeight: 'bold', color: tx.type === 'BUY' ? '#10b981' : '#ef4444' }}>
-              {tx.type} {tx.symbol}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{
+                display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700,
+                backgroundColor: tx.type === 'BUY' ? '#d1fae5' : '#fee2e2',
+                color: tx.type === 'BUY' ? '#065f46' : '#991b1b',
+              }}>
+                {tx.type}
+              </span>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>{tx.symbol}</span>
+              <StatusBadge status={tx.status} />
             </div>
-            <div style={{ fontSize: '12px', color: '#6b7280' }}>
-              {formatDate(tx.timestamp)}
-            </div>
+            <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{fmtDate(tx.timestamp)}</div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div>{tx.quantity.toFixed(8)}</div>
-            <div style={{ fontSize: '12px', color: '#6b7280' }}>
-              @ ${tx.priceUsd.toFixed(2)}
-            </div>
+            <div style={{ fontFamily: 'monospace', fontSize: 13 }}>{fmtQty(tx.quantity)}</div>
+            <div style={{ fontSize: 11, color: '#6b7280' }}>@ {fmt(tx.priceUsd)}</div>
           </div>
         </div>
       ))}
-      <div style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #e5e7eb' }}>
-        <Link to="/transactions" style={{ color: '#007bff', textDecoration: 'none' }}>
-          View all →
+      <div style={{ padding: '10px 14px', textAlign: 'center', borderTop: '1px solid #e5e7eb' }}>
+        <Link to="/transactions" style={{ color: '#3b82f6', textDecoration: 'none', fontSize: 13, fontWeight: 500 }}>
+          View all transactions →
         </Link>
       </div>
     </div>
   );
 }
 
-function PriceChart({ data }) {
-  // Transform data for Recharts - combine all symbols into one chart
-  const chartData = [];
-  const maxLength = Math.max(...data.map(d => d.data.length));
+function StatusBadge({ status }) {
+  const s = (status || '').toUpperCase();
+  const map = {
+    COMPLETED: { bg: '#d1fae5', color: '#065f46' },
+    FILLED: { bg: '#d1fae5', color: '#065f46' },
+    PENDING: { bg: '#fef3c7', color: '#92400e' },
+    NEW: { bg: '#fef3c7', color: '#92400e' },
+    PARTIALLY_FILLED: { bg: '#dbeafe', color: '#1e40af' },
+    FAILED: { bg: '#fee2e2', color: '#991b1b' },
+    CANCELLED: { bg: '#f3f4f6', color: '#6b7280' },
+  };
+  const colors = map[s] || { bg: '#f3f4f6', color: '#6b7280' };
+  return (
+    <span style={{
+      fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 3,
+      backgroundColor: colors.bg, color: colors.color,
+    }}>
+      {s.replace('_', ' ')}
+    </span>
+  );
+}
 
-  for (let i = 0; i < maxLength; i++) {
-    const point = { index: i };
-    data.forEach(({ symbol, data: history }) => {
-      if (history[i]) {
-        point[symbol] = history[i].priceUsd;
-        if (!point.time) {
-          point.time = new Date(history[i].timestamp).toLocaleTimeString();
-        }
-      }
-    });
-    if (Object.keys(point).length > 1) {
-      chartData.push(point);
-    }
-  }
-
-  const colors = ['#3b82f6', '#10b981', '#f59e0b'];
+/**
+ * Renders one mini line-chart per symbol so different price scales don't conflict.
+ */
+function PriceCharts({ data }) {
+  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'];
 
   return (
-    <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-      <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="time" />
-          <YAxis />
-          <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
-          {data.map(({ symbol }, index) => (
-            <Line 
-              key={symbol}
-              type="monotone" 
-              dataKey={symbol} 
-              stroke={colors[index % colors.length]}
-              strokeWidth={2}
-              dot={false}
-            />
-          ))}
-        </LineChart>
-      </ResponsiveContainer>
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(data.length, 3)}, 1fr)`, gap: 16 }}>
+      {data.map(({ symbol, data: history }, idx) => {
+        const chartData = history.map(p => ({
+          time: new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          price: Number(p.priceUsd),
+        }));
+
+        const prices = chartData.map(d => d.price);
+        const minP = Math.min(...prices);
+        const maxP = Math.max(...prices);
+        const pad = (maxP - minP) * 0.1 || maxP * 0.01;
+
+        return (
+          <div key={symbol} style={styles.card}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 8 }}>
+              {symbol}
+              {prices.length > 0 && (
+                <span style={{ fontWeight: 400, color: '#6b7280', marginLeft: 8 }}>
+                  {fmt(prices[prices.length - 1])}
+                </span>
+              )}
+            </div>
+            <ResponsiveContainer width="100%" height={180}>
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                <XAxis
+                  dataKey="time"
+                  tick={{ fontSize: 10, fill: '#9ca3af' }}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  domain={[minP - pad, maxP + pad]}
+                  tick={{ fontSize: 10, fill: '#9ca3af' }}
+                  tickFormatter={(v) => `$${v.toLocaleString()}`}
+                  width={70}
+                />
+                <Tooltip
+                  formatter={(v) => [fmt(v), symbol]}
+                  labelStyle={{ fontSize: 11, color: '#6b7280' }}
+                  contentStyle={{ fontSize: 12, borderRadius: 6, border: '1px solid #e5e7eb' }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="price"
+                  stroke={COLORS[idx % COLORS.length]}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 3 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 function SystemStatusWidget({ health }) {
-  const getStatusColor = (status) => {
-    if (status === 'OK') return '#10b981';
-    if (status === 'Down') return '#ef4444';
-    return '#6b7280';
-  };
+  const statusMap = health?.status || {};
+  const entries = Object.entries(statusMap);
+
+  if (entries.length === 0) return <EmptyState message="No status data" />;
+
+  const icons = { OK: '●', Down: '●', 'N/A': '○', Unknown: '○' };
+  const colors = { OK: '#10b981', Down: '#ef4444', 'N/A': '#9ca3af', Unknown: '#f59e0b' };
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      gap: '20px',
-      backgroundColor: '#fff',
-      padding: '20px',
-      borderRadius: '8px',
-      border: '1px solid #e5e7eb'
-    }}>
-      {Object.entries(health.status || {}).map(([key, value]) => (
-        <div key={key} style={{ flex: 1 }}>
-          <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>
-            {key.toUpperCase()}
+    <div style={{ ...styles.card, display: 'flex', gap: 32, flexWrap: 'wrap' }}>
+      {entries.map(([key, value]) => (
+        <div key={key} style={{ minWidth: 80 }}>
+          <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+            {key}
           </div>
-          <div style={{ 
-            fontSize: '18px', 
-            fontWeight: 'bold',
-            color: getStatusColor(value)
-          }}>
-            {value}
+          <div style={{ fontSize: 16, fontWeight: 600, color: colors[value] || '#6b7280', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 10 }}>{icons[value] || '○'}</span> {value}
           </div>
         </div>
       ))}
@@ -428,36 +473,109 @@ function SystemStatusWidget({ health }) {
   );
 }
 
-function ErrorBox({ error, onRetry }) {
-  const errorMessage = error?.response?.data?.message || error?.message || 'An error occurred';
-  
+/* ──────────────────── shared components ──────────────────── */
+
+function EmptyState({ message, children }) {
   return (
-    <div style={{ 
-      padding: '20px', 
-      backgroundColor: '#fee2e2', 
-      borderRadius: '8px',
-      border: '1px solid #fecaca'
+    <div style={{
+      padding: '32px 20px', textAlign: 'center', backgroundColor: '#f9fafb',
+      borderRadius: 8, border: '1px dashed #d1d5db', color: '#6b7280', fontSize: 14,
     }}>
-      <div style={{ color: '#dc2626', marginBottom: '10px' }}>{errorMessage}</div>
-      <button 
-        onClick={onRetry}
-        style={{
-          padding: '8px 16px',
-          backgroundColor: '#dc2626',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer'
-        }}
-      >
-        Retry
-      </button>
+      <p style={{ marginBottom: children ? 16 : 0 }}>{message}</p>
+      {children}
     </div>
   );
 }
 
-function formatPercent(value) {
-  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+function ErrorBox({ message, onRetry }) {
+  return (
+    <div style={{
+      padding: 16, backgroundColor: '#fef2f2', borderRadius: 8, border: '1px solid #fecaca',
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16,
+    }}>
+      <span style={{ color: '#dc2626', fontSize: 14 }}>{message}</span>
+      <button onClick={onRetry} style={styles.retryBtn}>Retry</button>
+    </div>
+  );
 }
+
+function Skeleton({ height = 40 }) {
+  return (
+    <div style={{
+      height, borderRadius: 8, background: 'linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%)',
+      backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite',
+    }}>
+      <style>{`@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
+    </div>
+  );
+}
+
+/* ──────────────────── styles ──────────────────── */
+
+const styles = {
+  cardGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: 16,
+    marginBottom: 28,
+  },
+  splitGrid: {
+    display: 'grid',
+    gridTemplateColumns: '2fr 1fr',
+    gap: 24,
+    marginBottom: 8,
+  },
+  card: {
+    padding: 16,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    border: '1px solid #e5e7eb',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+  },
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    overflow: 'hidden',
+    border: '1px solid #e5e7eb',
+  },
+  tableRow: {
+    borderBottom: '1px solid #f3f4f6',
+    transition: 'background-color 0.15s',
+  },
+  td: {
+    padding: '10px 14px',
+    fontSize: 14,
+  },
+  primaryBtn: {
+    display: 'inline-block',
+    padding: '8px 20px',
+    backgroundColor: '#3b82f6',
+    color: '#fff',
+    textDecoration: 'none',
+    borderRadius: 6,
+    fontWeight: 500,
+    fontSize: 14,
+  },
+  retryBtn: {
+    padding: '6px 14px',
+    backgroundColor: '#dc2626',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 4,
+    cursor: 'pointer',
+    fontSize: 13,
+    fontWeight: 500,
+  },
+  skeletonBar: {
+    height: 28,
+    width: '60%',
+    borderRadius: 4,
+    background: 'linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%)',
+    backgroundSize: '200% 100%',
+    animation: 'shimmer 1.5s infinite',
+  },
+};
 
 export default DashboardPage;

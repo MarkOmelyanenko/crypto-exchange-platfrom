@@ -42,6 +42,10 @@ public class SecurityConfig {
 			.authorizeHttpRequests(authorize -> authorize
 				// Allow public access to auth endpoints
 				.requestMatchers("/api/auth/**").permitAll()
+				// Allow public access to system health (for monitoring and dashboard)
+				.requestMatchers("/api/system/health").permitAll()
+				// Allow public access to price endpoints (read-only market data)
+				.requestMatchers("/api/prices/**").permitAll()
 				// Allow public access to Swagger UI and OpenAPI endpoints
 				.requestMatchers(
 					"/swagger-ui.html",
@@ -53,6 +57,8 @@ public class SecurityConfig {
 				// Allow public access to Actuator health endpoints
 				.requestMatchers("/actuator/health/**").permitAll()
 				.requestMatchers("/actuator/info").permitAll()
+				.requestMatchers("/api/system/health").permitAll()
+				.requestMatchers("/api/prices/**").permitAll()
 				// All other requests require authentication
 				.anyRequest().authenticated()
 			)

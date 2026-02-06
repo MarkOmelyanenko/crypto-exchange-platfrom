@@ -149,6 +149,6 @@ The dashboard (`/dashboard`) provides a comprehensive view of the user's portfol
 - **Holdings Table**: All assets with quantities, prices, market values, and PnL (sortable)
 - **Price Trends Chart**: 24-hour price history for top holdings (using Recharts)
 - **Recent Transactions**: Latest 10 transactions with link to full history
-- **System Status**: Health indicators for API, DB, and Kafka
+- **System Status**: Health indicators for API, DB, Redis, and Kafka
 
 The dashboard automatically polls for price updates every 10 seconds and handles empty states gracefully.

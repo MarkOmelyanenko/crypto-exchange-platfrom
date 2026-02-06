@@ -271,17 +271,52 @@ The dashboard provides comprehensive portfolio analytics for authenticated users
   - Public endpoint (no authentication required)
 
 - `GET /api/system/health` - Get system health
-  - Returns: simplified health status for API, DB, Kafka
+  - Returns: simplified health status for API, DB, Redis, Kafka
   - Public endpoint (no authentication required)
 
 ### Dashboard Calculations
 
 **Total Portfolio Value**: Sum of all asset market values (quantity × current price) + available cash (USDT)
 
-**Average Buy Price**: Weighted average cost basis calculated from all BUY trades, adjusted for SELL trades using FIFO/average cost method
+**Average Buy Price**: Weighted average cost basis calculated from all BUY trades, adjusted for SELL trades using average cost method
 
-**Unrealized PnL**: Current market value - cost basis (average buy price × quantity)
+**Unrealized PnL**: Current market value − cost basis (average buy price × quantity)
 
-**Realized PnL**: Sum of (sell price - average cost at time of sale) × quantity for all completed SELL trades
+**Realized PnL**: Sum of (sell price − average cost at time of sale) × quantity for all completed SELL trades
 
 **Note**: Calculations use average cost method for simplicity. All prices are in USD (USDT is treated as 1:1 with USD).
+
+### How Dashboard Prices & History Are Obtained from Binance
+
+All prices displayed on the dashboard are **Binance-driven**. No synthetic or random-walk data is used.
+
+**Real-time prices** (used in portfolio summary and holdings):
+1. `DashboardService.getCurrentPrices()` calls `BinanceService.getCurrentPrice()` for each asset symbol (e.g. `BTCUSDT`).
+2. Fallback: `PriceTick` table (Binance-fetched ticks stored by the scheduled job).
+3. Fallback: `MarketTick` table (simulator-generated ticks, if any).
+4. `BinanceService` uses the public Binance REST API (`https://api.binance.com/api/v3/ticker/price`).
+
+**Price snapshot** (`GET /api/prices/snapshot`):
+1. Fetches live price from Binance via `BinanceService.getCurrentPrice()`.
+2. Fallback: `PriceTick` table (Binance-fetched ticks stored by the scheduled job).
+3. Fallback: `MarketTick` table (simulator-generated ticks, if any).
+
+**Price history** (`GET /api/prices/history`):
+1. Fetches candlestick (kline) data directly from Binance via `BinanceService.getKlines()` (e.g. 1h intervals for 24h range).
+2. Fallback: `PriceTick` table entries for the requested time range.
+3. Fallback: `MarketTick` table entries for the requested time range.
+4. Returns empty array if no Binance data is available — no mock data is generated.
+
+**Scheduled price fetcher** (`BinancePriceFetcherService`):
+- Runs every 30 seconds (configurable via `app.price-fetcher.interval-ms`).
+- Fetches current prices for configured symbols (`app.price-fetcher.symbols`, default: `BTC,ETH,SOL`).
+- Stores each price as a `PriceTick` row (`symbol`, `price_usd`, `ts`).
+- This provides a local cache of Binance prices so the history endpoint works even when the Binance API is temporarily unreachable.
+
+**Configuration** (in `application.yml` or environment variables):
+```yaml
+app:
+  price-fetcher:
+    symbols: BTC,ETH,SOL          # Comma-separated symbols to track
+    interval-ms: 30000             # Fetch interval in milliseconds
+```

@@ -4,6 +4,9 @@ import com.cryptoexchange.backend.domain.model.*;
 import com.cryptoexchange.backend.domain.repository.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,7 +15,6 @@ import java.math.MathContext;
 import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.util.*;
-import java.util.Comparator;
 import java.util.stream.Collectors;
 
 @Service
@@ -28,19 +30,25 @@ public class DashboardService {
     private final AssetService assetService;
     private final MarketService marketService;
     private final MarketTickRepository marketTickRepository;
+    private final PriceTickRepository priceTickRepository;
+    private final BinanceService binanceService;
 
     public DashboardService(BalanceRepository balanceRepository,
                            TradeRepository tradeRepository,
                            OrderRepository orderRepository,
                            AssetService assetService,
                            MarketService marketService,
-                           MarketTickRepository marketTickRepository) {
+                           MarketTickRepository marketTickRepository,
+                           PriceTickRepository priceTickRepository,
+                           BinanceService binanceService) {
         this.balanceRepository = balanceRepository;
         this.tradeRepository = tradeRepository;
         this.orderRepository = orderRepository;
         this.assetService = assetService;
         this.marketService = marketService;
         this.marketTickRepository = marketTickRepository;
+        this.priceTickRepository = priceTickRepository;
+        this.binanceService = binanceService;
     }
 
     /**
@@ -49,8 +57,15 @@ public class DashboardService {
     @Transactional(readOnly = true)
     public DashboardSummary getSummary(UUID userId) {
         List<Balance> balances = balanceRepository.findAllByUserId(userId);
-        Asset usdtAsset = assetService.getAssetBySymbol("USDT");
-        
+
+        // Find USDT asset safely — brand-new setups may not have it yet
+        UUID usdtAssetId = null;
+        try {
+            usdtAssetId = assetService.getAssetBySymbol("USDT").getId();
+        } catch (Exception e) {
+            log.debug("USDT asset not found; treating all balances as non-cash");
+        }
+
         BigDecimal availableCashUsd = BigDecimal.ZERO;
         BigDecimal totalValueUsd = BigDecimal.ZERO;
         BigDecimal unrealizedPnlUsd = BigDecimal.ZERO;
@@ -63,12 +78,12 @@ public class DashboardService {
         for (Balance balance : balances) {
             Asset asset = balance.getAsset();
             BigDecimal quantity = balance.getAvailable().add(balance.getLocked());
-            
+
             if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
                 continue;
             }
 
-            if (asset.getId().equals(usdtAsset.getId())) {
+            if (usdtAssetId != null && asset.getId().equals(usdtAssetId)) {
                 // USDT is already in USD
                 availableCashUsd = availableCashUsd.add(quantity);
                 totalValueUsd = totalValueUsd.add(quantity);
@@ -112,16 +127,27 @@ public class DashboardService {
     @Transactional(readOnly = true)
     public List<Holding> getHoldings(UUID userId) {
         List<Balance> balances = balanceRepository.findAllByUserId(userId);
-        Asset usdtAsset = assetService.getAssetBySymbol("USDT");
+
+        UUID usdtAssetId = null;
+        try {
+            usdtAssetId = assetService.getAssetBySymbol("USDT").getId();
+        } catch (Exception e) {
+            log.debug("USDT asset not found; no balances will be excluded as cash");
+        }
+
         Map<String, BigDecimal> currentPrices = getCurrentPrices();
         List<Holding> holdings = new ArrayList<>();
 
         for (Balance balance : balances) {
             Asset asset = balance.getAsset();
             BigDecimal quantity = balance.getAvailable().add(balance.getLocked());
-            
-            if (quantity.compareTo(BigDecimal.ZERO) <= 0 || asset.getId().equals(usdtAsset.getId())) {
-                continue; // Skip zero balances and USDT (cash)
+
+            // Skip zero balances and USDT (cash)
+            if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            if (usdtAssetId != null && asset.getId().equals(usdtAssetId)) {
+                continue;
             }
 
             BigDecimal currentPrice = currentPrices.getOrDefault(asset.getSymbol(), BigDecimal.ZERO);
@@ -153,23 +179,30 @@ public class DashboardService {
     }
 
     /**
-     * Get recent transactions for user
+     * Get recent transactions for user (paginated at DB level for efficiency).
      */
     @Transactional(readOnly = true)
     public List<TransactionSummary> getRecentTransactions(UUID userId, int limit) {
-        List<Order> orders = orderRepository.findAllByUserIdOrderByCreatedAtDesc(userId);
-        
-        return orders.stream()
-            .limit(limit)
+        Page<Order> ordersPage = orderRepository.findAllByUserId(
+                userId,
+                PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt")));
+
+        return ordersPage.getContent().stream()
             .map(order -> {
                 Market market = order.getMarket();
                 Asset baseAsset = market.getBaseAsset();
                 String symbol = baseAsset.getSymbol();
                 String type = order.getSide().name();
-                BigDecimal quantity = order.getFilledAmount();
+
+                // Show filledAmount for filled orders, otherwise the original order amount
+                BigDecimal quantity = order.getFilledAmount().compareTo(BigDecimal.ZERO) > 0
+                        ? order.getFilledAmount()
+                        : order.getAmount();
                 BigDecimal price = order.getPrice() != null ? order.getPrice() : BigDecimal.ZERO;
-                String status = order.getStatus().name();
-                
+
+                // Map internal statuses to user-friendly labels
+                String status = mapOrderStatus(order.getStatus());
+
                 return new TransactionSummary(
                     order.getId(),
                     type,
@@ -181,6 +214,15 @@ public class DashboardService {
                 );
             })
             .collect(Collectors.toList());
+    }
+
+    private String mapOrderStatus(OrderStatus status) {
+        return switch (status) {
+            case FILLED -> "COMPLETED";
+            case NEW, PARTIALLY_FILLED -> "PENDING";
+            case CANCELED -> "CANCELLED";
+            case REJECTED -> "FAILED";
+        };
     }
 
     /**
@@ -308,25 +350,53 @@ public class DashboardService {
     }
 
     /**
-     * Get current prices for all assets from latest market ticks
+     * Get current prices for all assets.
+     * Priority: 1) Binance API (live), 2) PriceTick DB (Binance-fetched), 3) MarketTick DB
      */
     private Map<String, BigDecimal> getCurrentPrices() {
         Map<String, BigDecimal> prices = new HashMap<>();
-        
-        // Get latest tick for each market
+
+        // Collect all relevant asset symbols from active markets
         List<Market> markets = marketService.listActiveMarkets();
+        Set<String> symbols = new HashSet<>();
         for (Market market : markets) {
-            Optional<MarketTick> latestTick = marketTickRepository.findFirstByMarketSymbolOrderByTsDesc(market.getSymbol());
-            if (latestTick.isPresent()) {
-                Asset baseAsset = market.getBaseAsset();
-                prices.put(baseAsset.getSymbol(), latestTick.get().getLastPrice());
+            symbols.add(market.getBaseAsset().getSymbol());
+        }
+
+        // 1) Try Binance API for each symbol
+        for (String symbol : symbols) {
+            try {
+                String binanceSymbol = binanceService.toBinanceSymbol(symbol);
+                BigDecimal price = binanceService.getCurrentPrice(binanceSymbol);
+                if (price != null) {
+                    prices.put(symbol, price);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to get Binance price for {}: {}", symbol, e.getMessage());
             }
         }
 
-        // If no ticks available, use fallback prices (for new systems)
-        if (prices.isEmpty()) {
-            prices.put("BTC", new BigDecimal("65000"));
-            prices.put("ETH", new BigDecimal("3500"));
+        // 2) Fallback to PriceTick DB (Binance-fetched ticks stored by scheduled job)
+        for (String symbol : symbols) {
+            if (!prices.containsKey(symbol)) {
+                priceTickRepository.findFirstBySymbolOrderByTsDesc(symbol)
+                    .ifPresent(tick -> {
+                        prices.put(symbol, tick.getPriceUsd());
+                        log.debug("Price fallback to PriceTick for {}: {}", symbol, tick.getPriceUsd());
+                    });
+            }
+        }
+
+        // 3) Fallback to MarketTick DB (simulator ticks)
+        for (Market market : markets) {
+            String baseSymbol = market.getBaseAsset().getSymbol();
+            if (!prices.containsKey(baseSymbol)) {
+                marketTickRepository.findFirstByMarketSymbolOrderByTsDesc(market.getSymbol())
+                    .ifPresent(tick -> {
+                        prices.put(baseSymbol, tick.getLastPrice());
+                        log.debug("Price fallback to MarketTick for {}: {}", baseSymbol, tick.getLastPrice());
+                    });
+            }
         }
 
         return prices;

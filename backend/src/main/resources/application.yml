@@ -83,6 +83,10 @@ app:
         window: ${RATE_LIMIT_WALLET_WITHDRAW_WINDOW:60s}
         key-by: user
   
+  price-fetcher:
+    symbols: ${PRICE_FETCHER_SYMBOLS:BTC,ETH,SOL}
+    interval-ms: ${PRICE_FETCHER_INTERVAL_MS:30000}
+
   simulator:
     enabled: ${SIMULATOR_ENABLED:false}
     tick-interval-ms: ${SIMULATOR_TICK_INTERVAL_MS:1000}
