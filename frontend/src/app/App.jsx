@@ -10,6 +10,7 @@ function App() {
   const location = useLocation();
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
   const [cashBalance, setCashBalance] = useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const loadCashBalance = useCallback(async () => {
     try {
@@ -35,6 +36,11 @@ function App() {
     }
   }, [location.pathname, isAuthenticated, loadCashBalance]);
 
+  // Close mobile menu when route changes
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
   const fmtUsdt = (v) => {
     if (v == null || isNaN(Number(v))) return '...';
     return new Intl.NumberFormat('en-US', {
@@ -46,9 +52,42 @@ function App() {
     <div className="app-container">
       <header className="app-header">
         <div className="header-left">
-          <h1 className="header-logo">Crypto Exchange Simulator</h1>
+          <div className="header-top">
+            <h1 className="header-logo">Crypto Exchange Simulator</h1>
+            {!isAuthPage && isAuthenticated && (
+              <button
+                className="mobile-menu-toggle"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                aria-label="Toggle menu"
+              >
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  {mobileMenuOpen ? (
+                    <>
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </>
+                  ) : (
+                    <>
+                      <line x1="3" y1="12" x2="21" y2="12"></line>
+                      <line x1="3" y1="6" x2="21" y2="6"></line>
+                      <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </>
+                  )}
+                </svg>
+              </button>
+            )}
+          </div>
           {!isAuthPage && isAuthenticated && (
-            <nav className="header-nav">
+            <nav className={`header-nav ${mobileMenuOpen ? 'mobile-open' : ''}`}>
               <NavLink to="/dashboard" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
                 Dashboard
               </NavLink>

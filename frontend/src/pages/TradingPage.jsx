@@ -623,7 +623,9 @@ function PriceChart({ data, range, quoteSymbol }) {
   const prices = chartData.map(d => d.price);
   const minP = Math.min(...prices);
   const maxP = Math.max(...prices);
-  const pad = (maxP - minP) * 0.1 || maxP * 0.01;
+  // Increase padding to ensure top value is visible (15% padding)
+  const priceRange = maxP - minP;
+  const pad = priceRange > 0 ? priceRange * 0.15 : maxP * 0.02;
 
   const formatTickLabel = (v) => {
     if (isUsd) return `${v.toLocaleString()} USDT`;
@@ -638,7 +640,10 @@ function PriceChart({ data, range, quoteSymbol }) {
   return (
     <div style={styles.card}>
       <ResponsiveContainer width="100%" height={320}>
-        <LineChart data={chartData}>
+        <LineChart 
+          data={chartData}
+          margin={{ top: 10, right: 10, bottom: 5, left: 5 }}
+        >
           <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
           <XAxis
             dataKey="time"
@@ -649,7 +654,8 @@ function PriceChart({ data, range, quoteSymbol }) {
             domain={[minP - pad, maxP + pad]}
             tick={{ fontSize: 11, fill: '#9ca3af' }}
             tickFormatter={formatTickLabel}
-            width={90}
+            width={100}
+            allowDecimals={true}
           />
           <Tooltip
             formatter={formatTooltipValue}

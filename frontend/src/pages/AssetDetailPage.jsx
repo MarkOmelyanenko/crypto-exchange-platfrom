@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { getBySymbol, getMyPosition } from '../shared/api/services/assetsService';
 import { getHistory } from '../shared/api/services/priceService';
 import { create as createTransaction } from '../shared/api/services/transactionsService';
+import { getWalletBalances, getCashBalance } from '../shared/api/services/walletService';
 import { usePriceStream } from '../shared/hooks/usePriceStream';
 import CryptoIcon from '../shared/components/CryptoIcon';
 import {
@@ -248,38 +249,103 @@ function AssetDetailPage() {
 
 function TradeWidget({ symbol, currentPrice, position, onSuccess }) {
   const [side, setSide] = useState('BUY');
-  const [quantity, setQuantity] = useState('');
+  const [amount, setAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+  const [balances, setBalances] = useState([]);
+  const [cashBalance, setCashBalance] = useState(null);
 
-  const estimatedTotal = quantity && !isNaN(Number(quantity)) && Number(quantity) > 0
-    ? (Number(quantity) * Number(currentPrice)).toFixed(2)
-    : null;
+  // Load balances
+  useEffect(() => {
+    const loadBalances = async () => {
+      try {
+        const [walletBalances, cash] = await Promise.all([
+          getWalletBalances(),
+          getCashBalance(),
+        ]);
+        setBalances(walletBalances || []);
+        setCashBalance(cash);
+      } catch {
+        setBalances([]);
+        setCashBalance(null);
+      }
+    };
+    loadBalances();
+  }, []);
+
+  const numAmount = amount ? Number(amount) : 0;
+
+  // Calculate estimated result
+  let estimated = null;
+  if (numAmount > 0 && currentPrice) {
+    if (side === 'BUY') {
+      estimated = numAmount / Number(currentPrice);
+    } else {
+      estimated = numAmount * Number(currentPrice);
+    }
+  }
+
+  // Available balance for the selected side
+  const availableForTrade = () => {
+    if (side === 'BUY') {
+      // For BUY, use USDT balance
+      if (cashBalance?.cashUsd != null) {
+        return Number(cashBalance.cashUsd);
+      }
+      const usdtBal = balances.find(b => b.asset === 'USDT');
+      return usdtBal ? Number(usdtBal.available) : 0;
+    } else {
+      // For SELL, use position available quantity
+      return position && position.availableQuantity
+        ? Number(position.availableQuantity)
+        : 0;
+    }
+  };
+
+  const avail = availableForTrade();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
+    setError(null);
+    setSuccess(null);
 
-    const qty = Number(quantity);
-    if (!quantity || isNaN(qty) || qty <= 0) {
-      setError('Please enter a valid quantity');
+    if (!amount || numAmount <= 0) {
+      setError('Please enter a valid amount');
       return;
     }
 
     setSubmitting(true);
     try {
-      const result = await createTransaction({
-        symbol,
-        side,
-        quantity: qty,
-      });
+      let result;
+      if (side === 'BUY') {
+        // For BUY, amount is in USDT, convert to quantity
+        const qty = numAmount / Number(currentPrice);
+        result = await createTransaction({
+          symbol,
+          side,
+          quantity: qty,
+        });
+      } else {
+        // For SELL, amount is the quantity to sell
+        result = await createTransaction({
+          symbol,
+          side,
+          quantity: numAmount,
+        });
+      }
 
-      setSuccess(
-        `${side} ${fmtQty(result.quantity)} ${result.symbol} @ ${fmt(result.priceUsd)} — Total: ${fmt(result.totalUsd)}`
-      );
-      setQuantity('');
+      if (side === 'BUY') {
+        setSuccess(
+          `Bought ${fmtQty(result.quantity)} ${result.symbol} for ${fmt(result.totalUsd)} at ${fmt(result.priceUsd)}`
+        );
+      } else {
+        setSuccess(
+          `Sold ${fmtQty(result.quantity)} ${result.symbol} for ${fmt(result.totalUsd)} at ${fmt(result.priceUsd)}`
+        );
+      }
+
+      setAmount('');
       onSuccess();
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Transaction failed';
@@ -291,119 +357,144 @@ function TradeWidget({ symbol, currentPrice, position, onSuccess }) {
 
   return (
     <div style={styles.card}>
-      {/* Side toggle */}
-      <div style={{ display: 'flex', marginBottom: 16, borderRadius: 6, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
+      {/* BUY / SELL Tabs */}
+      <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderRadius: 6, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
         <button
-          type="button"
           onClick={() => setSide('BUY')}
           style={{
-            flex: 1, padding: '8px 0', border: 'none', cursor: 'pointer',
-            fontWeight: 600, fontSize: 14,
+            flex: 1, padding: '10px 0', border: 'none', fontSize: 15, fontWeight: 700, cursor: 'pointer',
             backgroundColor: side === 'BUY' ? '#10b981' : '#f9fafb',
             color: side === 'BUY' ? '#fff' : '#6b7280',
             transition: 'all 0.15s',
           }}
         >
-          BUY
+          Buy
         </button>
         <button
-          type="button"
           onClick={() => setSide('SELL')}
           style={{
-            flex: 1, padding: '8px 0', border: 'none', cursor: 'pointer',
-            fontWeight: 600, fontSize: 14,
+            flex: 1, padding: '10px 0', border: 'none', fontSize: 15, fontWeight: 700, cursor: 'pointer',
             backgroundColor: side === 'SELL' ? '#ef4444' : '#f9fafb',
             color: side === 'SELL' ? '#fff' : '#6b7280',
             transition: 'all 0.15s',
           }}
         >
-          SELL
+          Sell
         </button>
       </div>
 
-      <form onSubmit={handleSubmit}>
-        {/* Current price */}
-        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Market Price</div>
-        <div style={{ fontSize: 20, fontWeight: 700, color: '#111827', fontFamily: 'monospace', marginBottom: 12 }}>
-          {fmt(currentPrice)}
-        </div>
+      {/* Market Price */}
+      <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Market Price</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: '#111827', fontFamily: 'monospace', marginBottom: 16 }}>
+        {fmt(currentPrice)}
+      </div>
 
-        {/* Quantity input */}
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>
-            Quantity ({symbol})
+      {/* Available Balance */}
+      {avail != null && (
+        <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 12 }}>
+          Available:{' '}
+          <span style={{ fontWeight: 600, color: '#111827' }}>
+            {side === 'BUY'
+              ? `${fmtQty(avail, 2)} USDT`
+              : `${fmtQty(avail)} ${symbol}`}
+          </span>
+          {avail > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                if (side === 'BUY') {
+                  setAmount(String(avail.toFixed(2)));
+                } else {
+                  setAmount(String(avail));
+                }
+              }}
+              style={styles.maxBtn}
+            >
+              MAX
+            </button>
+          )}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit}>
+        <div style={{ marginBottom: 16 }}>
+          <label style={styles.label}>
+            {side === 'BUY'
+              ? `Amount (USDT) to spend`
+              : `Amount (${symbol}) to sell`}
           </label>
           <input
             type="number"
             step="any"
             min="0"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
+            value={amount}
+            onChange={(e) => { setAmount(e.target.value); setError(null); setSuccess(null); }}
             placeholder="0.00"
-            style={styles.tradeInput}
+            style={styles.input}
             disabled={submitting}
           />
-          {/* Quick buttons for SELL */}
-          {side === 'SELL' && position && Number(position.availableQuantity) > 0 && (
-            <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-              {[0.25, 0.5, 0.75, 1].map((pct) => (
-                <button
-                  key={pct}
-                  type="button"
-                  onClick={() => setQuantity(String(Number(position.availableQuantity) * pct))}
-                  style={styles.quickBtn}
-                >
-                  {pct === 1 ? 'Max' : `${pct * 100}%`}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
 
-        {/* Estimated total */}
-        {estimatedTotal && (
-          <div style={{
-            padding: '8px 12px', backgroundColor: '#f9fafb', borderRadius: 6,
-            marginBottom: 12, fontSize: 13, color: '#374151',
-          }}>
-            Estimated Total: <strong>{fmt(estimatedTotal)}</strong>
+        {/* Quick amounts for BUY / percentages for SELL */}
+        {side === 'BUY' && avail > 0 && (
+          <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
+            {[0.25, 0.5, 0.75, 1].map((pct) => (
+              <button
+                key={pct}
+                type="button"
+                onClick={() => setAmount(String((avail * pct).toFixed(2)))}
+                style={styles.quickBtn}
+              >
+                {pct === 1 ? 'Max' : `${pct * 100}%`}
+              </button>
+            ))}
+          </div>
+        )}
+        {side === 'SELL' && avail > 0 && (
+          <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
+            {[0.25, 0.5, 0.75, 1].map((pct) => (
+              <button
+                key={pct}
+                type="button"
+                onClick={() => setAmount(String(avail * pct))}
+                style={styles.quickBtn}
+              >
+                {pct === 1 ? 'Max' : `${pct * 100}%`}
+              </button>
+            ))}
           </div>
         )}
 
-        {/* Error */}
-        {error && (
-          <div style={{
-            padding: '8px 12px', backgroundColor: '#fef2f2', borderRadius: 6,
-            marginBottom: 12, fontSize: 13, color: '#dc2626',
-          }}>
-            {error}
+        {/* Estimated result */}
+        {estimated != null && estimated > 0 && (
+          <div style={styles.estimateBox}>
+            <span style={{ fontSize: 13, color: '#6b7280' }}>You will receive ≈</span>
+            <span style={{ fontSize: 16, fontWeight: 700, color: '#111827' }}>
+              {side === 'BUY'
+                ? `${fmtQty(estimated)} ${symbol}`
+                : `${fmtQty(estimated, 2)} USDT`}
+            </span>
           </div>
         )}
 
-        {/* Success */}
-        {success && (
-          <div style={{
-            padding: '8px 12px', backgroundColor: '#f0fdf4', borderRadius: 6,
-            marginBottom: 12, fontSize: 13, color: '#166534',
-          }}>
-            {success}
-          </div>
-        )}
+        {error && <div style={styles.errorBox}>{error}</div>}
+        {success && <div style={styles.successBox}>{success}</div>}
 
-        {/* Submit */}
         <button
           type="submit"
-          disabled={submitting || !quantity}
+          disabled={submitting || !amount || numAmount <= 0 || !currentPrice}
           style={{
-            width: '100%', padding: '10px 0', border: 'none', borderRadius: 6,
-            cursor: submitting ? 'not-allowed' : 'pointer',
-            fontWeight: 600, fontSize: 14, color: '#fff',
-            backgroundColor: submitting ? '#9ca3af' : (side === 'BUY' ? '#10b981' : '#ef4444'),
-            transition: 'all 0.15s',
-            opacity: (!quantity || submitting) ? 0.7 : 1,
+            ...styles.submitBtn,
+            backgroundColor: side === 'BUY' ? '#10b981' : '#ef4444',
+            opacity: submitting || !amount || numAmount <= 0 || !currentPrice ? 0.5 : 1,
+            cursor: submitting || !amount || numAmount <= 0 || !currentPrice ? 'not-allowed' : 'pointer',
           }}
         >
-          {submitting ? 'Processing...' : `${side} ${symbol}`}
+          {submitting
+            ? 'Executing...'
+            : side === 'BUY'
+              ? `Buy ${symbol}`
+              : `Sell ${symbol}`}
         </button>
       </form>
     </div>
@@ -422,12 +513,17 @@ function PriceChart({ data, range }) {
   const prices = chartData.map(d => d.price);
   const minP = Math.min(...prices);
   const maxP = Math.max(...prices);
-  const pad = (maxP - minP) * 0.1 || maxP * 0.01;
+  // Increase padding to ensure top value is visible (15% padding)
+  const priceRange = maxP - minP;
+  const pad = priceRange > 0 ? priceRange * 0.15 : maxP * 0.02;
 
   return (
     <div style={styles.card}>
       <ResponsiveContainer width="100%" height={320}>
-        <LineChart data={chartData}>
+        <LineChart 
+          data={chartData}
+          margin={{ top: 10, right: 10, bottom: 5, left: 5 }}
+        >
           <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
           <XAxis
             dataKey="time"
@@ -438,7 +534,8 @@ function PriceChart({ data, range }) {
             domain={[minP - pad, maxP + pad]}
             tick={{ fontSize: 11, fill: '#9ca3af' }}
             tickFormatter={(v) => `${v.toLocaleString()} USDT`}
-            width={80}
+            width={90}
+            allowDecimals={true}
           />
           <Tooltip
             formatter={(v) => [fmt(v), 'Price']}
@@ -617,10 +714,76 @@ const styles = {
     borderRadius: 6, fontSize: 16, fontFamily: 'monospace',
     outline: 'none', boxSizing: 'border-box',
   },
+  label: {
+    display: 'block',
+    fontSize: 13,
+    fontWeight: 500,
+    color: '#374151',
+    marginBottom: 6,
+  },
+  input: {
+    width: '100%',
+    padding: '10px 12px',
+    fontSize: 16,
+    border: '1px solid #d1d5db',
+    borderRadius: 6,
+    outline: 'none',
+    boxSizing: 'border-box',
+    fontFamily: 'monospace',
+  },
+  maxBtn: {
+    marginLeft: 8,
+    padding: '2px 8px',
+    fontSize: 11,
+    fontWeight: 600,
+    border: '1px solid #d1d5db',
+    borderRadius: 3,
+    backgroundColor: '#f9fafb',
+    cursor: 'pointer',
+    color: '#3b82f6',
+  },
   quickBtn: {
-    flex: 1, padding: '3px 0', fontSize: 11, fontWeight: 500,
+    flex: 1, padding: '5px 0', fontSize: 12, fontWeight: 500,
     border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer',
     backgroundColor: '#f9fafb', color: '#374151',
+  },
+  estimateBox: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '10px 14px',
+    backgroundColor: '#f9fafb',
+    borderRadius: 6,
+    marginBottom: 16,
+    border: '1px solid #e5e7eb',
+  },
+  submitBtn: {
+    width: '100%',
+    padding: '12px 20px',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 6,
+    fontSize: 16,
+    fontWeight: 600,
+    transition: 'opacity 0.15s',
+  },
+  errorBox: {
+    padding: '10px 14px',
+    backgroundColor: '#fef2f2',
+    border: '1px solid #fecaca',
+    borderRadius: 6,
+    color: '#dc2626',
+    fontSize: 13,
+    marginBottom: 12,
+  },
+  successBox: {
+    padding: '10px 14px',
+    backgroundColor: '#f0fdf4',
+    border: '1px solid #bbf7d0',
+    borderRadius: 6,
+    color: '#16a34a',
+    fontSize: 13,
+    marginBottom: 12,
   },
 };
 

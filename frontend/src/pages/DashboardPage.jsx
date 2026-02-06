@@ -549,7 +549,9 @@ function PriceCharts({ data }) {
         const prices = chartData.map(d => d.price);
         const minP = Math.min(...prices);
         const maxP = Math.max(...prices);
-        const pad = (maxP - minP) * 0.1 || maxP * 0.01;
+        // Increase padding to ensure top value is visible (15% padding)
+        const range = maxP - minP;
+        const pad = range > 0 ? range * 0.15 : maxP * 0.02;
 
         return (
           <div key={symbol} style={styles.card}>
@@ -562,7 +564,10 @@ function PriceCharts({ data }) {
               )}
             </div>
             <ResponsiveContainer width="100%" height={180}>
-              <LineChart data={chartData}>
+              <LineChart 
+                data={chartData}
+                margin={{ top: 10, right: 10, bottom: 5, left: 5 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                 <XAxis
                   dataKey="time"
@@ -573,7 +578,8 @@ function PriceCharts({ data }) {
                   domain={[minP - pad, maxP + pad]}
                   tick={{ fontSize: 10, fill: '#9ca3af' }}
                   tickFormatter={(v) => `${v.toLocaleString()} USDT`}
-                  width={70}
+                  width={80}
+                  allowDecimals={true}
                 />
                 <Tooltip
                   formatter={(v) => [fmt(v), symbol]}

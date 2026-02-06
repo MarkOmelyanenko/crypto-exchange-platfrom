@@ -167,11 +167,11 @@ function AccountPage() {
   };
 
   return (
-    <div style={{ maxWidth: '700px', margin: '2rem auto', padding: '0 1rem' }}>
+    <div className="account-page-container" style={{ maxWidth: '700px', margin: '2rem auto', padding: '0 1rem' }}>
       <h1 style={{ marginBottom: '2rem', color: 'var(--text-primary)' }}>Account Settings</h1>
 
       {/* Profile Section */}
-      <div style={{ marginBottom: '2.5rem', padding: '1.5rem', border: '2px solid var(--border-color)', borderRadius: '1rem', backgroundColor: 'var(--bg-primary)', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)' }}>
+      <div className="account-section responsive-card" style={{ marginBottom: '2.5rem' }}>
         <h2 style={{ marginTop: 0, marginBottom: '1.5rem', color: 'var(--text-primary)' }}>Profile Information</h2>
         <form onSubmit={handleProfileSubmit}>
           <div className="form-group">
@@ -236,7 +236,7 @@ function AccountPage() {
       </div>
 
       {/* Password Section */}
-      <div style={{ padding: '1.5rem', border: '2px solid var(--border-color)', borderRadius: '1rem', backgroundColor: 'var(--bg-primary)', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)' }}>
+      <div className="account-section responsive-card">
         <h2 style={{ marginTop: 0, marginBottom: '1.5rem', color: 'var(--text-primary)' }}>Change Password</h2>
         <form onSubmit={handlePasswordSubmit}>
           <div className="form-group">
