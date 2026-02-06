@@ -41,7 +41,12 @@ function WalletPage() {
 
   // Split USDT out to show prominently
   const usdtBalance = balances.find(b => b.asset === 'USDT');
-  const otherBalances = balances.filter(b => b.asset !== 'USDT' && Number(b.available) > 0);
+  // Filter out assets with zero or near-zero balances (same threshold as DashboardPage)
+  const otherBalances = balances.filter(b => {
+    if (b.asset === 'USDT') return false;
+    const available = Number(b.available) || 0;
+    return available > 0.00000001; // Filter out zero or very small quantities
+  });
 
   return (
     <div style={{ maxWidth: 800, margin: '0 auto' }}>
