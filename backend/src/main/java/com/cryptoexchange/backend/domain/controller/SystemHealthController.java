@@ -33,14 +33,13 @@ public class SystemHealthController {
                 java.lang.reflect.Method healthMethod = healthEndpoint.getClass().getMethod("health");
                 Object health = healthMethod.invoke(healthEndpoint);
 
-                java.lang.reflect.Method getDetailsMethod = health.getClass().getMethod("getDetails");
-                @SuppressWarnings("unchecked")
-                Map<String, Object> details = (Map<String, Object>) getDetailsMethod.invoke(health);
+                // Spring Boot 4.x uses getComponents(), earlier versions use getDetails()
+                Map<String, Object> components = extractComponents(health);
 
                 status.put("api", "OK");
-                status.put("db", extractComponentStatus(details, "db"));
-                status.put("redis", extractComponentStatus(details, "redis"));
-                status.put("kafka", extractComponentStatus(details, "kafka"));
+                status.put("db", extractComponentStatus(components, "db"));
+                status.put("redis", extractComponentStatus(components, "redis"));
+                status.put("kafka", extractComponentStatus(components, "kafka"));
             } else {
                 fillFallbackStatus(status);
             }
@@ -52,21 +51,61 @@ public class SystemHealthController {
     }
 
     /**
-     * Extract the status of a single component from the actuator health details via reflection.
+     * Extract components map from the health result.
+     * Tries getComponents() first (Spring Boot 4.x), then getDetails() (older versions).
      */
-    private String extractComponentStatus(Map<String, Object> details, String component) {
-        if (!details.containsKey(component)) {
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> extractComponents(Object health) {
+        // Try getComponents() first (Spring Boot 4.x CompositeHealth)
+        try {
+            java.lang.reflect.Method getComponentsMethod = health.getClass().getMethod("getComponents");
+            Object result = getComponentsMethod.invoke(health);
+            if (result instanceof Map) {
+                return (Map<String, Object>) result;
+            }
+        } catch (NoSuchMethodException ignored) {
+            // Fall through to getDetails()
+        } catch (Exception ignored) {
+            // Fall through to getDetails()
+        }
+
+        // Try getDetails() (Spring Boot 3.x and earlier)
+        try {
+            java.lang.reflect.Method getDetailsMethod = health.getClass().getMethod("getDetails");
+            Object result = getDetailsMethod.invoke(health);
+            if (result instanceof Map) {
+                return (Map<String, Object>) result;
+            }
+        } catch (Exception ignored) {
+            // Return empty map
+        }
+
+        return Map.of();
+    }
+
+    /**
+     * Extract the status of a single component from the actuator health components via reflection.
+     */
+    private String extractComponentStatus(Map<String, Object> components, String component) {
+        if (!components.containsKey(component)) {
             return "N/A";
         }
-        Object componentHealth = details.get(component);
+        Object componentHealth = components.get(component);
         if (componentHealth == null) {
             return "N/A";
         }
         try {
             java.lang.reflect.Method getStatusMethod = componentHealth.getClass().getMethod("getStatus");
             Object statusObj = getStatusMethod.invoke(componentHealth);
-            java.lang.reflect.Method getCodeMethod = statusObj.getClass().getMethod("getCode");
-            String code = (String) getCodeMethod.invoke(statusObj);
+            // Try getCode() first, then getValue() (Spring Boot 4.x)
+            String code = null;
+            try {
+                java.lang.reflect.Method getCodeMethod = statusObj.getClass().getMethod("getCode");
+                code = (String) getCodeMethod.invoke(statusObj);
+            } catch (NoSuchMethodException e) {
+                java.lang.reflect.Method getValueMethod = statusObj.getClass().getMethod("getValue");
+                code = (String) getValueMethod.invoke(statusObj);
+            }
             return "UP".equals(code) ? "OK" : "Down";
         } catch (Exception e) {
             return "Unknown";

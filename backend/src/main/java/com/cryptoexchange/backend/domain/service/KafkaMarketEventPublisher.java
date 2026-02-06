@@ -4,8 +4,10 @@ import org.springframework.stereotype.Component;
 
 /**
  * Kafka-based implementation of MarketEventPublisher.
+ * Only active when Kafka is configured.
  */
 @Component
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "spring.kafka.bootstrap-servers")
 public class KafkaMarketEventPublisher implements MarketEventPublisher {
     
     private final MarketSimulatorKafkaPublisher kafkaPublisher;

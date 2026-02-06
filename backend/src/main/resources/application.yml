@@ -35,7 +35,7 @@ spring:
       port: ${REDIS_PORT:6379}
 
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:}
     consumer:
       group-id: crypto-exchange-sim
       auto-offset-reset: earliest

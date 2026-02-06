@@ -1,14 +1,12 @@
-version: '3.8'
-
 services:
   jenkins:
-    image: jenkins/jenkins:lts
+    build: .
     container_name: crypto-jenkins
     ports:
       - "8081:8080"
     volumes:
       - jenkins_home:/var/jenkins_home
-      # Mount Docker socket only if building Docker images in pipeline
+      # Mount Docker socket for building images in pipeline
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
 

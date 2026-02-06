@@ -15,8 +15,10 @@ import org.springframework.transaction.event.TransactionalEventListener;
 /**
  * Publishes domain events to Kafka AFTER database transaction commit.
  * This ensures events are only published if the transaction succeeds.
+ * Only active when Kafka is configured.
  */
 @Component
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "spring.kafka.bootstrap-servers")
 public class KafkaEventPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(KafkaEventPublisher.class);

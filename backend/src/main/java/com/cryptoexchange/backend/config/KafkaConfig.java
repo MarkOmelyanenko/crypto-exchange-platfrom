@@ -28,8 +28,10 @@ import java.util.Map;
 /**
  * Kafka configuration for order matching events.
  * Configures JSON serialization, topic management, and error handling with DLT.
+ * Only active when spring.kafka.bootstrap-servers is set (non-empty).
  */
 @Configuration
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "spring.kafka.bootstrap-servers")
 public class KafkaConfig {
 
     @Value("${spring.kafka.bootstrap-servers}")

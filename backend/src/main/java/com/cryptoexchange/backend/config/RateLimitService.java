@@ -13,6 +13,7 @@ import java.util.List;
 /**
  * Redis-based rate limiting service using fixed window counter algorithm.
  * Uses Lua script for atomic increment and expiration.
+ * Fails open if Redis is unavailable (requests are allowed).
  */
 @Service
 public class RateLimitService {

@@ -22,8 +22,10 @@ import java.util.UUID;
  * Uses concurrency=1 per partition to ensure sequential matching per market.
  * Implements idempotency by checking order status before processing.
  * Error handling with retry and DLT is configured in KafkaConfig.
+ * Only active when Kafka is configured.
  */
 @Component
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "spring.kafka.bootstrap-servers")
 public class OrderMatchingConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(OrderMatchingConsumer.class);

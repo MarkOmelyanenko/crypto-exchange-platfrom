@@ -309,7 +309,7 @@ function DashboardPage() {
       </div>
 
       {/* ─── System Status ─── */}
-      {/* <Section title="System Status">
+      <Section title="System Status">
         {errors.health ? (
           <ErrorBox message="Failed to load system status" onRetry={loadDashboardData} />
         ) : loading.health ? (
@@ -319,7 +319,7 @@ function DashboardPage() {
         ) : (
           <EmptyState message="Status unavailable" />
         )}
-      </Section> */}
+      </Section>
     </div>
   );
 }

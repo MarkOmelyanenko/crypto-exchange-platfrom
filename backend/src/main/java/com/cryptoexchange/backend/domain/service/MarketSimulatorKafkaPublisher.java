@@ -10,8 +10,10 @@ import org.springframework.stereotype.Component;
 
 /**
  * Publishes market simulator events to Kafka.
+ * Only active when Kafka is configured.
  */
 @Component
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "spring.kafka.bootstrap-servers")
 public class MarketSimulatorKafkaPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(MarketSimulatorKafkaPublisher.class);

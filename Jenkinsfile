@@ -1,43 +1,28 @@
 pipeline {
     agent any
 
+    environment {
+        DOCKER_AVAILABLE = sh(script: 'docker --version >/dev/null 2>&1 && echo true || echo false', returnStdout: true).trim()
+    }
+
     stages {
-        stage('Build & Test') {
+
+        // ── Backend ────────────────────────────────────────────
+
+        stage('Backend: Test') {
             steps {
                 dir('backend') {
-                    // Skip tests requiring external services (DB, Redis, Kafka)
-                    // Exclude: Integration tests, SpringBootTest context loading tests, and Testcontainers-based tests
-                    // Allow build to succeed if no tests match (no pure unit tests exist yet)
-                    sh '''
-                        export TESTCONTAINERS_RYUK_DISABLED=true
-                        export TESTCONTAINERS_CHECKS_DISABLE=1
-                        ./mvnw -B -ntp clean test \
-                            -Dtest='!*IntegrationTest,!BackendApplicationTests,!WalletServiceTest,!WalletServiceConcurrencyTest' \
-                            -Dtestcontainers.ryuk.disabled=true \
-                            -Dsurefire.failIfNoSpecifiedTests=false
-                    '''
+                    sh './mvnw -B -ntp clean test'
                 }
             }
             post {
                 always {
-                    dir('backend') {
-                        script {
-                            def reportCount = sh(
-                                script: 'find target/surefire-reports -name "*.xml" 2>/dev/null | wc -l',
-                                returnStdout: true
-                            ).trim().toInteger()
-                            if (reportCount > 0) {
-                                junit 'target/surefire-reports/*.xml'
-                            } else {
-                                echo 'No test reports found - skipping JUnit report collection'
-                            }
-                        }
-                    }
+                    junit allowEmptyResults: true, testResults: 'backend/target/surefire-reports/*.xml'
                 }
             }
         }
 
-        stage('Package') {
+        stage('Backend: Package') {
             steps {
                 dir('backend') {
                     sh './mvnw -B -ntp -DskipTests package'
@@ -46,23 +31,65 @@ pipeline {
             }
         }
 
-        stage('Docker Build') {
+        // ── Frontend ───────────────────────────────────────────
+
+        stage('Frontend: Install') {
             steps {
-                script {
-                    if (fileExists('backend/Dockerfile')) {
-                        try {
-                            sh 'docker --version'
-                            dir('backend') {
-                                sh 'docker build -t crypto-backend:ci .'
-                            }
-                        } catch (Exception e) {
-                            echo "Docker not available, skipping image build: ${e.message}"
+                dir('frontend') {
+                    sh 'node --version && npm --version'
+                    sh 'npm ci --no-audit --no-fund'
+                }
+            }
+        }
+
+        stage('Frontend: Lint') {
+            steps {
+                dir('frontend') {
+                    sh 'npm run lint'
+                }
+            }
+        }
+
+        stage('Frontend: Build') {
+            steps {
+                dir('frontend') {
+                    sh 'npm run build'
+                    archiveArtifacts artifacts: 'dist/**', fingerprint: true
+                }
+            }
+        }
+
+        // ── Docker Images ──────────────────────────────────────
+
+        stage('Docker Build') {
+            when {
+                expression { return env.DOCKER_AVAILABLE == 'true' }
+            }
+            parallel {
+                stage('Backend Image') {
+                    steps {
+                        dir('backend') {
+                            sh "docker build -t crypto-backend:${env.BUILD_NUMBER} -t crypto-backend:latest ."
                         }
-                    } else {
-                        echo "Dockerfile not found, skipping Docker build"
+                    }
+                }
+                stage('Frontend Image') {
+                    steps {
+                        dir('frontend') {
+                            sh "docker build -t crypto-frontend:${env.BUILD_NUMBER} -t crypto-frontend:latest ."
+                        }
                     }
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo 'CI pipeline completed successfully.'
+        }
+        failure {
+            echo 'CI pipeline failed.'
         }
     }
 }
