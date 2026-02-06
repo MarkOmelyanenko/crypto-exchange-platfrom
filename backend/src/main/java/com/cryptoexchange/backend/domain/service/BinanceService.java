@@ -13,21 +13,45 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Service for fetching real-time cryptocurrency prices from Binance API.
+ * Includes short-TTL in-memory caching to avoid hitting rate limits.
  */
 @Service
 public class BinanceService {
 
     private static final Logger log = LoggerFactory.getLogger(BinanceService.class);
     private static final String BINANCE_API_BASE = "https://api.binance.com/api/v3";
+    private static final long TICKER_CACHE_TTL_MS = 5_000; // 5 seconds
+    private static final long KLINE_CACHE_TTL_MS = 10_000; // 10 seconds
+
     private final RestTemplate restTemplate;
+
+    // In-memory caches
+    private final ConcurrentHashMap<String, CacheEntry<BinanceTicker24h>> tickerCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CacheEntry<List<PriceHistoryPoint>>> klinesCache = new ConcurrentHashMap<>();
+    // Cache for ALL 24h tickers fetched in a single call
+    private volatile CacheEntry<Map<String, BinanceTicker24h>> allTickersCache;
 
     public BinanceService(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
+    }
+
+    private static class CacheEntry<T> {
+        final T value;
+        final long timestamp;
+
+        CacheEntry(T value) {
+            this.value = value;
+            this.timestamp = System.currentTimeMillis();
+        }
+
+        boolean isExpired(long ttlMs) {
+            return System.currentTimeMillis() - timestamp > ttlMs;
+        }
     }
 
     /**
@@ -53,25 +77,108 @@ public class BinanceService {
     }
 
     /**
-     * Get 24h ticker statistics for a symbol.
+     * Get 24h ticker statistics for a symbol (with caching).
+     * First checks the all-tickers cache (populated by getBatchTicker24h),
+     * then falls back to a per-symbol Binance call.
      * @param symbol Trading pair symbol (e.g., "BTCUSDT")
      * @return Ticker data or null if error
      */
     public BinanceTicker24h getTicker24h(String symbol) {
+        String key = symbol.toUpperCase();
+
+        // 1. Check per-symbol cache
+        CacheEntry<BinanceTicker24h> cached = tickerCache.get(key);
+        if (cached != null && !cached.isExpired(TICKER_CACHE_TTL_MS)) {
+            return cached.value;
+        }
+
+        // 2. Check the all-tickers cache (may have been populated by a recent list call)
+        CacheEntry<Map<String, BinanceTicker24h>> allCached = allTickersCache;
+        if (allCached != null && !allCached.isExpired(TICKER_CACHE_TTL_MS)) {
+            BinanceTicker24h fromAll = allCached.value.get(key);
+            if (fromAll != null) {
+                tickerCache.put(key, new CacheEntry<>(fromAll));
+                return fromAll;
+            }
+        }
+
+        // 3. Fetch from Binance per-symbol
         try {
-            String url = BINANCE_API_BASE + "/ticker/24hr?symbol=" + symbol.toUpperCase();
+            String url = BINANCE_API_BASE + "/ticker/24hr?symbol=" + key;
             ResponseEntity<BinanceTicker24h> response = restTemplate.getForEntity(
                 url, BinanceTicker24h.class);
             
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                return response.getBody();
+                BinanceTicker24h ticker = response.getBody();
+                tickerCache.put(key, new CacheEntry<>(ticker));
+                return ticker;
             }
         } catch (RestClientException e) {
             log.warn("Failed to fetch 24h ticker from Binance for {}: {}", symbol, e.getMessage());
         } catch (Exception e) {
             log.error("Unexpected error fetching 24h ticker from Binance for {}: {}", symbol, e.getMessage());
         }
-        return null;
+        // Return stale cache if available
+        return cached != null ? cached.value : null;
+    }
+
+    /**
+     * Fetch ALL 24h tickers from Binance in a single API call and cache the result.
+     * This is far more efficient than per-symbol calls when listing many assets.
+     * The full ticker list is cached for TICKER_CACHE_TTL_MS (5 seconds).
+     */
+    private Map<String, BinanceTicker24h> fetchAllTickers() {
+        CacheEntry<Map<String, BinanceTicker24h>> cached = allTickersCache;
+        if (cached != null && !cached.isExpired(TICKER_CACHE_TTL_MS)) {
+            return cached.value;
+        }
+
+        try {
+            String url = BINANCE_API_BASE + "/ticker/24hr";
+            ResponseEntity<BinanceTicker24h[]> response = restTemplate.getForEntity(
+                url, BinanceTicker24h[].class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Map<String, BinanceTicker24h> allTickers = new HashMap<>();
+                for (BinanceTicker24h ticker : response.getBody()) {
+                    if (ticker.symbol != null) {
+                        allTickers.put(ticker.symbol.toUpperCase(), ticker);
+                    }
+                }
+                allTickersCache = new CacheEntry<>(allTickers);
+                // Also populate the per-symbol cache
+                allTickers.forEach((key, ticker) -> tickerCache.put(key, new CacheEntry<>(ticker)));
+                log.debug("Fetched {} tickers from Binance (all)", allTickers.size());
+                return allTickers;
+            }
+        } catch (RestClientException e) {
+            log.warn("Failed to fetch all 24h tickers from Binance: {}", e.getMessage());
+        } catch (Exception e) {
+            log.error("Unexpected error fetching all 24h tickers from Binance: {}", e.getMessage());
+        }
+
+        // Return stale cache if available
+        return cached != null ? cached.value : Collections.emptyMap();
+    }
+
+    /**
+     * Get 24h ticker statistics for multiple symbols.
+     * Fetches ALL tickers in one Binance API call (cached 5s) and filters to requested symbols.
+     * Much more efficient than individual calls when listing 100+ assets.
+     */
+    public Map<String, BinanceTicker24h> getBatchTicker24h(List<String> binanceSymbols) {
+        Map<String, BinanceTicker24h> allTickers = fetchAllTickers();
+        Map<String, BinanceTicker24h> result = new HashMap<>();
+
+        for (String sym : binanceSymbols) {
+            String key = sym.toUpperCase();
+            BinanceTicker24h ticker = allTickers.get(key);
+            if (ticker != null) {
+                result.put(key, ticker);
+            }
+        }
+
+        return result;
     }
 
     /**
@@ -82,6 +189,12 @@ public class BinanceService {
      * @return List of price history points
      */
     public List<PriceHistoryPoint> getKlines(String symbol, String interval, int limit) {
+        String cacheKey = symbol.toUpperCase() + ":" + interval + ":" + limit;
+        CacheEntry<List<PriceHistoryPoint>> cached = klinesCache.get(cacheKey);
+        if (cached != null && !cached.isExpired(KLINE_CACHE_TTL_MS)) {
+            return cached.value;
+        }
+
         List<PriceHistoryPoint> history = new ArrayList<>();
         
         try {
@@ -109,6 +222,13 @@ public class BinanceService {
             log.warn("Failed to fetch klines from Binance for {}: {}", symbol, e.getMessage());
         } catch (Exception e) {
             log.error("Unexpected error fetching klines from Binance for {}: {}", symbol, e.getMessage());
+        }
+
+        if (!history.isEmpty()) {
+            klinesCache.put(cacheKey, new CacheEntry<>(history));
+        } else if (cached != null) {
+            // Return stale data when Binance is unavailable
+            return cached.value;
         }
         
         return history;

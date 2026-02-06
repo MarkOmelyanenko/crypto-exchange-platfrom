@@ -1,7 +1,10 @@
 package com.cryptoexchange.backend.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -15,6 +18,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Security configuration for the application.
@@ -61,6 +65,17 @@ public class SecurityConfig {
 				.requestMatchers("/api/prices/**").permitAll()
 				// All other requests require authentication
 				.anyRequest().authenticated()
+			)
+			// Return 401 JSON for unauthenticated requests (instead of 403 or redirect)
+			.exceptionHandling(ex -> ex
+				.authenticationEntryPoint((request, response, authException) -> {
+					response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+					response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+					new ObjectMapper().writeValue(response.getOutputStream(),
+						Map.of("code", "UNAUTHORIZED",
+							   "message", "Authentication required",
+							   "path", request.getRequestURI()));
+				})
 			)
 			// Add JWT filter before UsernamePasswordAuthenticationFilter
 			.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

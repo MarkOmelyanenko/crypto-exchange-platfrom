@@ -12,7 +12,8 @@ export const ENDPOINTS = {
   },
   assets: {
     list: '/api/assets',
-    byId: (id) => `/api/assets/${id}`,
+    bySymbol: (symbol) => `/api/assets/${encodeURIComponent(symbol)}`,
+    myPosition: (symbol) => `/api/assets/${encodeURIComponent(symbol)}/my-position`,
   },
   transactions: {
     list: '/api/transactions',

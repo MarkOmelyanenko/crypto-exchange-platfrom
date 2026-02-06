@@ -3,6 +3,7 @@ import LoginPage from '../pages/LoginPage';
 import RegisterPage from '../pages/RegisterPage';
 import DashboardPage from '../pages/DashboardPage';
 import AssetsPage from '../pages/AssetsPage';
+import AssetDetailPage from '../pages/AssetDetailPage';
 import TransactionsPage from '../pages/TransactionsPage';
 import App from './App';
 import PrivateRoute from '../shared/components/PrivateRoute';
@@ -37,6 +38,14 @@ export const router = createBrowserRouter([
         element: (
           <PrivateRoute>
             <AssetsPage />
+          </PrivateRoute>
+        ),
+      },
+      {
+        path: 'assets/:symbol',
+        element: (
+          <PrivateRoute>
+            <AssetDetailPage />
           </PrivateRoute>
         ),
       },

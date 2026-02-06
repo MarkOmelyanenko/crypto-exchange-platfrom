@@ -41,12 +41,50 @@
  */
 
 /**
- * @typedef {Object} AssetDto
+ * @typedef {Object} AssetListDto
  * @property {string} id - Asset ID (UUID)
  * @property {string} symbol - Asset symbol (e.g., 'BTC', 'ETH')
  * @property {string} name - Asset name (e.g., 'Bitcoin', 'Ethereum')
  * @property {number} scale - Decimal precision/scale for the asset
- * @property {string} [createdAt] - Asset creation timestamp
+ * @property {number|null} priceUsd - Current price in USD (null if unavailable)
+ * @property {number|null} change24hPercent - 24h price change percentage (null if unavailable)
+ * @property {boolean} priceUnavailable - True if price data could not be fetched
+ * @property {string} updatedAt - Timestamp of last price update
+ */
+
+/**
+ * @typedef {Object} AssetDetailDto
+ * @property {string} id - Asset ID (UUID)
+ * @property {string} symbol - Asset symbol
+ * @property {string} name - Asset name
+ * @property {number} scale - Decimal precision
+ * @property {number|null} priceUsd - Current price in USD
+ * @property {number|null} change24hPercent - 24h change %
+ * @property {number|null} highPrice24h - 24h high
+ * @property {number|null} lowPrice24h - 24h low
+ * @property {number|null} volume24h - 24h trading volume
+ * @property {boolean} priceUnavailable - True if Binance is down
+ * @property {string} updatedAt - Timestamp
+ */
+
+/**
+ * @typedef {Object} PagedResponse
+ * @property {Array} items - Page items
+ * @property {number} total - Total item count
+ * @property {number} page - Current page (0-based)
+ * @property {number} size - Page size
+ * @property {number} totalPages - Total pages
+ */
+
+/**
+ * @typedef {Object} PositionDto
+ * @property {string} symbol - Asset symbol
+ * @property {string} name - Asset name
+ * @property {number} quantity - Total quantity held
+ * @property {number} availableQuantity - Available (not locked) quantity
+ * @property {number} lockedQuantity - Locked quantity (in open orders)
+ * @property {number|null} currentPriceUsd - Current market price
+ * @property {number|null} marketValueUsd - Total market value
  */
 
 /**

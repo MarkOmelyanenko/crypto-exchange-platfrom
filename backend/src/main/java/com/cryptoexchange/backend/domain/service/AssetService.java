@@ -49,4 +49,15 @@ public class AssetService {
         return assetRepository.findBySymbol(symbol)
             .orElseThrow(() -> new NotFoundException("Asset not found with symbol: " + symbol));
     }
+
+    @Transactional(readOnly = true)
+    public Asset findBySymbolIgnoreCase(String symbol) {
+        return assetRepository.findBySymbolIgnoreCase(symbol.trim().toUpperCase())
+            .orElseThrow(() -> new NotFoundException("Asset not found with symbol: " + symbol));
+    }
+
+    @Transactional(readOnly = true)
+    public List<Asset> searchAssets(String query) {
+        return assetRepository.searchByQuery(query);
+    }
 }

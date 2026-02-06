@@ -168,6 +168,11 @@ curl -H "Authorization: Bearer <your-token>" http://localhost:8080/api/users/me
 - `GET /api/markets/{symbol}/ticks` - Get historical ticks
 - `GET /api/trades` - List trades (requires marketId)
 
+### Assets Endpoints (require JWT authentication)
+- `GET /api/assets` - List assets with live Binance prices (supports `q`, `sort`, `dir`, `page`, `size`)
+- `GET /api/assets/{symbol}` - Get asset detail by symbol (case-insensitive) with 24h stats
+- `GET /api/assets/{symbol}/my-position` - Get user's position for the asset
+
 ### Protected Endpoints (require JWT authentication)
 - `POST /api/orders` - Create order
 - `GET /api/orders` - List my orders
@@ -320,3 +325,34 @@ app:
     symbols: BTC,ETH,SOL          # Comma-separated symbols to track
     interval-ms: 30000             # Fetch interval in milliseconds
 ```
+
+## Assets Feature (Phase 5)
+
+The assets feature provides a list page and detail page backed by live Binance prices.
+
+### How Assets Fetch Prices
+
+1. **List endpoint** (`GET /api/assets`): Uses `BinanceService.getBatchTicker24h()` to fetch
+   24h ticker data for all assets in a single Binance API call. Returns `priceUsd` and
+   `change24hPercent` for each asset. USDT is always $1.00 / 0%.
+
+2. **Detail endpoint** (`GET /api/assets/{symbol}`): Uses `BinanceService.getTicker24h()` for
+   the specific symbol, returning detailed stats (price, 24h change, high, low, volume).
+
+3. **Position endpoint** (`GET /api/assets/{symbol}/my-position`): Combines the user's
+   `Balance` with the live Binance price to compute `marketValueUsd`.
+
+### Caching Strategy
+
+`BinanceService` includes an in-memory `ConcurrentHashMap` cache with short TTLs:
+- **Ticker cache**: 5-second TTL — avoids repeated calls for the same symbol within seconds.
+- **Klines cache**: 10-second TTL — avoids repeated history calls for the same (symbol, range).
+- **Stale data fallback**: If Binance is unreachable, the last cached value is returned instead
+  of null, ensuring the UI always shows the most recent known price.
+
+### Graceful Failure
+
+If Binance is completely unavailable (no cache available):
+- Assets are returned with `priceUsd: null`, `change24hPercent: null`, and `priceUnavailable: true`.
+- The frontend renders "—" for unavailable prices and displays a hint.
+- No 500 errors are propagated; all exceptions are caught and logged.

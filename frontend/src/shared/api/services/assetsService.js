@@ -6,20 +6,31 @@ import { ENDPOINTS } from '../endpoints';
  */
 
 /**
- * Get list of all assets.
- * @returns {Promise<import('../contracts').AssetDto[]>} List of assets
+ * Get paginated list of assets with prices.
+ * @param {{ q?: string, sort?: string, dir?: string, page?: number, size?: number }} params
+ * @returns {Promise<{ items: Array, total: number, page: number, size: number, totalPages: number }>}
  */
-export async function list() {
-  const response = await apiClient.get(ENDPOINTS.assets.list);
+export async function list(params = {}) {
+  const response = await apiClient.get(ENDPOINTS.assets.list, { params });
   return response.data;
 }
 
 /**
- * Get asset by ID.
- * @param {string} id - Asset ID (UUID)
- * @returns {Promise<import('../contracts').AssetDto>} Asset data
+ * Get asset details by symbol (case-insensitive).
+ * @param {string} symbol - Asset symbol (e.g., 'BTC')
+ * @returns {Promise<Object>} Asset detail data with price info
  */
-export async function getById(id) {
-  const response = await apiClient.get(ENDPOINTS.assets.byId(id));
+export async function getBySymbol(symbol) {
+  const response = await apiClient.get(ENDPOINTS.assets.bySymbol(symbol));
+  return response.data;
+}
+
+/**
+ * Get current user's position for an asset.
+ * @param {string} symbol - Asset symbol (e.g., 'BTC')
+ * @returns {Promise<Object>} Position data (quantity, marketValue, etc.)
+ */
+export async function getMyPosition(symbol) {
+  const response = await apiClient.get(ENDPOINTS.assets.myPosition(symbol));
   return response.data;
 }
