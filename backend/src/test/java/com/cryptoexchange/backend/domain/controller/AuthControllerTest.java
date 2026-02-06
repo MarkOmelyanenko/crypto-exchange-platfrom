@@ -1,9 +1,11 @@
 package com.cryptoexchange.backend.domain.controller;
 
 import com.cryptoexchange.backend.config.JacksonConfig;
+import com.cryptoexchange.backend.config.JwtAuthenticationFilter;
 import com.cryptoexchange.backend.config.JwtService;
 import com.cryptoexchange.backend.config.RateLimitProperties;
 import com.cryptoexchange.backend.config.RateLimitService;
+import com.cryptoexchange.backend.config.SecurityConfig;
 import com.cryptoexchange.backend.domain.model.UserAccount;
 import com.cryptoexchange.backend.domain.service.AuthService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,12 +22,11 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(AuthController.class)
-@Import(JacksonConfig.class)
+@Import({JacksonConfig.class, SecurityConfig.class})
 class AuthControllerTest {
 
     @Autowired
@@ -39,6 +40,9 @@ class AuthControllerTest {
 
     @MockitoBean
     private JwtService jwtService;
+
+    @MockitoBean
+    private JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @MockitoBean
     private RateLimitService rateLimitService;
@@ -61,9 +65,8 @@ class AuthControllerTest {
         request.email = "test@example.com";
         request.password = "Password123!";
 
-        // When/Then
+        // When/Then - CSRF is disabled in SecurityConfig, so we don't need csrf() token
         mockMvc.perform(post("/api/auth/register")
-                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -85,9 +88,8 @@ class AuthControllerTest {
         request.email = "test@example.com";
         request.password = "Password123!";
 
-        // When/Then
+        // When/Then - CSRF is disabled in SecurityConfig, so we don't need csrf() token
         mockMvc.perform(post("/api/auth/register")
-                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
@@ -108,9 +110,8 @@ class AuthControllerTest {
         request.loginOrEmail = "testuser";
         request.password = "Password123!";
 
-        // When/Then
+        // When/Then - CSRF is disabled in SecurityConfig, so we don't need csrf() token
         mockMvc.perform(post("/api/auth/login")
-                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -131,9 +132,8 @@ class AuthControllerTest {
         request.loginOrEmail = "testuser";
         request.password = "WrongPassword";
 
-        // When/Then
+        // When/Then - CSRF is disabled in SecurityConfig, so we don't need csrf() token
         mockMvc.perform(post("/api/auth/login")
-                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnauthorized())
@@ -148,9 +148,8 @@ class AuthControllerTest {
         request.email = "invalid-email"; // Invalid
         request.password = "short"; // Too short
 
-        // When/Then
+        // When/Then - CSRF is disabled in SecurityConfig, so we don't need csrf() token
         mockMvc.perform(post("/api/auth/register")
-                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());

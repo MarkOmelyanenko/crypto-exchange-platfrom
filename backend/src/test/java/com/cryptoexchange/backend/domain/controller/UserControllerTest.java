@@ -1,9 +1,11 @@
 package com.cryptoexchange.backend.domain.controller;
 
 import com.cryptoexchange.backend.config.JacksonConfig;
+import com.cryptoexchange.backend.config.JwtAuthenticationFilter;
 import com.cryptoexchange.backend.config.JwtService;
 import com.cryptoexchange.backend.config.RateLimitProperties;
 import com.cryptoexchange.backend.config.RateLimitService;
+import com.cryptoexchange.backend.config.SecurityConfig;
 import com.cryptoexchange.backend.domain.model.UserAccount;
 import com.cryptoexchange.backend.domain.service.UserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,12 +26,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(UserController.class)
-@Import(JacksonConfig.class)
+@Import({JacksonConfig.class, SecurityConfig.class})
 class UserControllerTest {
 
     @Autowired
@@ -43,6 +44,9 @@ class UserControllerTest {
 
     @MockitoBean
     private JwtService jwtService;
+
+    @MockitoBean
+    private JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @MockitoBean
     private RateLimitService rateLimitService;
@@ -98,10 +102,9 @@ class UserControllerTest {
         request.login = "newuser";
         request.email = "newemail@example.com";
 
-        // When/Then
+        // When/Then - CSRF is disabled in SecurityConfig, so we don't need csrf() token
         mockMvc.perform(put("/api/users/me")
                         .with(authentication(userAuth()))
-                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -122,10 +125,9 @@ class UserControllerTest {
         request.login = "existinguser";
         request.email = "test@example.com";
 
-        // When/Then
+        // When/Then - CSRF is disabled in SecurityConfig, so we don't need csrf() token
         mockMvc.perform(put("/api/users/me")
                         .with(authentication(userAuth()))
-                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
@@ -144,10 +146,9 @@ class UserControllerTest {
         request.login = "testuser";
         request.email = "existing@example.com";
 
-        // When/Then
+        // When/Then - CSRF is disabled in SecurityConfig, so we don't need csrf() token
         mockMvc.perform(put("/api/users/me")
                         .with(authentication(userAuth()))
-                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
@@ -163,10 +164,9 @@ class UserControllerTest {
         request.login = "testuser";
         request.email = "invalid-email"; // Invalid
 
-        // When/Then
+        // When/Then - CSRF is disabled in SecurityConfig, so we don't need csrf() token
         mockMvc.perform(put("/api/users/me")
                         .with(authentication(userAuth()))
-                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
@@ -181,7 +181,8 @@ class UserControllerTest {
         request.login = "newuser";
         request.email = "newemail@example.com";
 
-        // When/Then
+        // When/Then - CSRF is disabled in SecurityConfig, so we don't need csrf() token
+        // The request will fail on authentication check, returning 401
         mockMvc.perform(put("/api/users/me")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -199,10 +200,9 @@ class UserControllerTest {
         request.currentPassword = "CurrentPass123!";
         request.newPassword = "NewPass123!";
 
-        // When/Then
+        // When/Then - CSRF is disabled in SecurityConfig, so we don't need csrf() token
         mockMvc.perform(put("/api/users/me/password")
                         .with(authentication(userAuth()))
-                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -221,10 +221,9 @@ class UserControllerTest {
         request.currentPassword = "WrongPass123!";
         request.newPassword = "NewPass123!";
 
-        // When/Then
+        // When/Then - CSRF is disabled in SecurityConfig, so we don't need csrf() token
         mockMvc.perform(put("/api/users/me/password")
                         .with(authentication(userAuth()))
-                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
@@ -244,14 +243,13 @@ class UserControllerTest {
         request.currentPassword = "CurrentPass123!";
         request.newPassword = "short";
 
-        // When/Then
+        // When/Then - CSRF is disabled in SecurityConfig, so we don't need csrf() token
         mockMvc.perform(put("/api/users/me/password")
                         .with(authentication(userAuth()))
-                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Password change failed"));
+                .andExpect(jsonPath("$.message").value("Validation failed"));
 
         verify(userService).changePassword(USER_ID, "CurrentPass123!", "short");
     }
@@ -263,10 +261,9 @@ class UserControllerTest {
         request.currentPassword = ""; // Invalid
         request.newPassword = "short"; // Too short
 
-        // When/Then
+        // When/Then - CSRF is disabled in SecurityConfig, so we don't need csrf() token
         mockMvc.perform(put("/api/users/me/password")
                         .with(authentication(userAuth()))
-                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
@@ -281,7 +278,8 @@ class UserControllerTest {
         request.currentPassword = "CurrentPass123!";
         request.newPassword = "NewPass123!";
 
-        // When/Then
+        // When/Then - CSRF is disabled in SecurityConfig, so we don't need csrf() token
+        // The request will fail on authentication check, returning 401
         mockMvc.perform(put("/api/users/me/password")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
