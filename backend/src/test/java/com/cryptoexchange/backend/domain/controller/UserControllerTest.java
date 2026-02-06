@@ -24,6 +24,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -100,6 +101,7 @@ class UserControllerTest {
         // When/Then
         mockMvc.perform(put("/api/users/me")
                         .with(authentication(userAuth()))
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -123,6 +125,7 @@ class UserControllerTest {
         // When/Then
         mockMvc.perform(put("/api/users/me")
                         .with(authentication(userAuth()))
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
@@ -144,6 +147,7 @@ class UserControllerTest {
         // When/Then
         mockMvc.perform(put("/api/users/me")
                         .with(authentication(userAuth()))
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
@@ -162,6 +166,7 @@ class UserControllerTest {
         // When/Then
         mockMvc.perform(put("/api/users/me")
                         .with(authentication(userAuth()))
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
@@ -197,6 +202,7 @@ class UserControllerTest {
         // When/Then
         mockMvc.perform(put("/api/users/me/password")
                         .with(authentication(userAuth()))
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -218,6 +224,7 @@ class UserControllerTest {
         // When/Then
         mockMvc.perform(put("/api/users/me/password")
                         .with(authentication(userAuth()))
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
@@ -240,6 +247,7 @@ class UserControllerTest {
         // When/Then
         mockMvc.perform(put("/api/users/me/password")
                         .with(authentication(userAuth()))
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
@@ -258,6 +266,7 @@ class UserControllerTest {
         // When/Then
         mockMvc.perform(put("/api/users/me/password")
                         .with(authentication(userAuth()))
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());

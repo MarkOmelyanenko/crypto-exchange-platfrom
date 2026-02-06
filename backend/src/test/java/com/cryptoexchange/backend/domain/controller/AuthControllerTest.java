@@ -20,6 +20,7 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -62,6 +63,7 @@ class AuthControllerTest {
 
         // When/Then
         mockMvc.perform(post("/api/auth/register")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -85,6 +87,7 @@ class AuthControllerTest {
 
         // When/Then
         mockMvc.perform(post("/api/auth/register")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
@@ -107,6 +110,7 @@ class AuthControllerTest {
 
         // When/Then
         mockMvc.perform(post("/api/auth/login")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -129,6 +133,7 @@ class AuthControllerTest {
 
         // When/Then
         mockMvc.perform(post("/api/auth/login")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnauthorized())
@@ -145,6 +150,7 @@ class AuthControllerTest {
 
         // When/Then
         mockMvc.perform(post("/api/auth/register")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
