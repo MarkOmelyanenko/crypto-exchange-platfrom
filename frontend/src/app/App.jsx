@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Outlet, NavLink, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../shared/context/AuthContext';
 import { getCashBalance } from '../shared/api/services/walletService';
+import Footer from '../shared/components/Footer';
 import '../index.css';
 
 function App() {
@@ -145,9 +146,12 @@ function App() {
             </NavLink>
           </nav>
         </aside>
-        <main className="app-main">
-          <Outlet context={{ cashBalance, refreshCashBalance: loadCashBalance }} />
-        </main>
+        <div className="app-main-wrapper">
+          <main className="app-main">
+            <Outlet context={{ cashBalance, refreshCashBalance: loadCashBalance }} />
+          </main>
+          <Footer />
+        </div>
       </div>
       )}
       {isAuthPage && (
