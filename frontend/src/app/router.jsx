@@ -8,6 +8,7 @@ import TransactionsPage from '../pages/TransactionsPage';
 import DepositPage from '../pages/DepositPage';
 import WalletPage from '../pages/WalletPage';
 import TradingPage from '../pages/TradingPage';
+import AccountPage from '../pages/AccountPage';
 import App from './App';
 import PrivateRoute from '../shared/components/PrivateRoute';
 
@@ -81,6 +82,14 @@ export const router = createBrowserRouter([
         element: (
           <PrivateRoute>
             <TradingPage />
+          </PrivateRoute>
+        ),
+      },
+      {
+        path: 'account',
+        element: (
+          <PrivateRoute>
+            <AccountPage />
           </PrivateRoute>
         ),
       },

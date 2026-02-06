@@ -9,6 +9,8 @@ export const ENDPOINTS = {
   },
   users: {
     me: '/api/users/me',
+    updateProfile: '/api/users/me',
+    changePassword: '/api/users/me/password',
   },
   assets: {
     list: '/api/assets',
