@@ -1,23 +1,66 @@
 # Crypto Exchange
 
-A full-stack cryptocurrency exchange platform built with Spring Boot and React. Users can register, deposit USDT, browse live-priced crypto assets, execute market and limit orders, and track their portfolio -- all powered by real-time price data from external exchanges (WhiteBit, Binance).
+A full-stack cryptocurrency exchange platform built with Spring Boot, React, PostgreSQL, Redis, Kafka. Users can register, deposit USDT, browse live-priced crypto assets, execute market orders, and track their portfolio — all powered by real-time price data from external exchanges (WhiteBit).
 
 ---
 
 ## Key Features
 
-- **JWT Authentication** -- registration, login, profile management, and password change with stateless token-based security (BCrypt + JJWT).
-- **Portfolio Dashboard** -- aggregated portfolio value, per-asset holdings with live USD prices, and profit/loss tracking.
-- **Wallet and Deposits** -- multi-asset balance management with USDT cash deposits subject to a rolling 24-hour limit.
-- **Asset Catalog** -- browse 100+ seeded crypto assets with live prices, 24h change, search, sorting, and pagination.
-- **Asset Detail View** -- price charts (24h / 7d / 30d), market statistics (high, low, volume), and the user's current position.
-- **Market Orders** -- execute spot BUY/SELL orders at live market prices fetched from WhiteBit.
-- **Limit Order Book** -- place limit orders matched by a price-time priority matching engine with partial fill support.
-- **Transaction History** -- unified, filterable view of all transactions and trades with pagination.
-- **Real-Time Price Stream** -- Server-Sent Events (SSE) endpoint broadcasting live price updates to connected clients.
-- **Rate Limiting** -- Redis-backed per-user rate limits on order placement, deposits, and withdrawals.
-- **Health Monitoring** -- Spring Boot Actuator integration with custom system health endpoint reporting API, database, Redis, and Kafka status.
-- **API Documentation** -- interactive Swagger UI auto-generated from annotated controllers via SpringDoc OpenAPI.
+- **JWT Authentication** — registration, login, profile management, and password change with stateless token-based security (BCrypt + JJWT).
+- **Portfolio Dashboard** — aggregated portfolio value, per-asset holdings with live USD prices, and profit/loss tracking.
+- **Wallet and Deposits** — multi-asset balance management with USDT cash deposits subject to a rolling 24-hour limit.
+- **Asset Catalog** — browse 100+ seeded crypto assets with live prices, 24h change, search, sorting, and pagination.
+- **Asset Detail View** — price charts (24h / 7d / 30d), market statistics (high, low, volume), and the user's current position.
+- **Market Orders** — execute spot BUY/SELL orders at live market prices fetched from WhiteBit.
+- **Transaction History** — unified, filterable view of all transactions and trades with pagination.
+- **Real-Time Price Stream** — Server-Sent Events (SSE) endpoint broadcasting live price updates to connected clients.
+- **Rate Limiting** — Redis-backed per-user rate limits on order placement, deposits, and withdrawals.
+- **Health Monitoring** — Spring Boot Actuator integration with custom system health endpoint reporting API, database, Redis, and Kafka status.
+- **API Documentation** — interactive Swagger UI auto-generated from annotated controllers via SpringDoc OpenAPI.
+
+---
+
+## Screenshots
+
+### Login
+
+![Login](docs/screenshots/login.png)
+
+### Registration
+
+![Registration](docs/screenshots/register.png)
+
+### Dashboard
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+### Assets
+
+![Assets](docs/screenshots/assets.png)
+
+### Asset Detail
+
+![Asset Detail](docs/screenshots/asset-detail.png)
+
+### Trading
+
+![Trading](docs/screenshots/trade.png)
+
+### Wallet
+
+![Wallet](docs/screenshots/wallet.png)
+
+### Deposit
+
+![Deposit](docs/screenshots/deposit.png)
+
+### Transactions
+
+![Transactions](docs/screenshots/transactions.png)
+
+### Account Settings
+
+![Account Settings](docs/screenshots/account.png)
 
 ---
 
@@ -25,16 +68,16 @@ A full-stack cryptocurrency exchange platform built with Spring Boot and React. 
 
 | Layer            | Technology                                                                 |
 |------------------|----------------------------------------------------------------------------|
-| **Backend**      | Java 21, Spring Boot 4.0, Spring Security, Spring Data JPA, Spring Kafka  |
-| **Frontend**     | React 19, Vite 7, React Router 6, Axios, Recharts                         |
-| **Database**     | PostgreSQL 16 with Flyway migrations                                       |
-| **Cache**        | Redis 7 (caching, rate limiting)                                           |
-| **Messaging**    | Apache Kafka (Confluent 7.6) with Zookeeper                               |
-| **Auth**         | JWT (jjwt 0.12.5) + BCrypt                                                |
-| **API Docs**     | SpringDoc OpenAPI 3.0.1 (Swagger UI)                                      |
+| **Backend**      | Java 21, Spring Boot 4, Spring Security, Spring Data JPA, Spring Kafka  |
+| **Frontend**     | React 19, Vite, React Router, Axios, Recharts                         |
+| **Database**     | PostgreSQL with Flyway migrations                                       |
+| **Cache**        | Redis (caching, rate limiting)                                           |
+| **Messaging**    | Apache Kafka with Zookeeper                               |
+| **Auth**         | JWT + BCrypt                                                |
+| **API Docs**     | SpringDoc OpenAPI (Swagger UI)                                      |
 | **Build**        | Maven (backend), npm (frontend), Docker, Make                              |
 | **CI/CD**        | Jenkins (Declarative Pipeline), Makefile                                   |
-| **Testing**      | JUnit 5, Mockito, Testcontainers (PostgreSQL, Kafka), H2, ESLint          |
+| **Testing**      | JUnit, Mockito, Testcontainers (PostgreSQL, Kafka), H2, ESLint          |
 
 ---
 
@@ -54,15 +97,15 @@ A full-stack cryptocurrency exchange platform built with Spring Boot and React. 
                      |      |     |
             +--------+  +---+  +--+--------+
             |           |      |           |
-      +-----v---+  +---v---+  +---v----+  |
-      |PostgreSQL|  | Redis |  | Kafka  |  |  External APIs
+      +-----v----+  +---v---+  +---v----+  |
+      |PostgreSQL|  | Redis |  | Kafka  |  | External APIs
       |  :5432   |  | :6379 |  | :9092  |  +---> WhiteBit
-      +---------+   +-------+  +--------+  +---> Binance
+      +---------+   +-------+  +--------+
 ```
 
 - The **React frontend** communicates with the backend over REST (`/api/**`) and subscribes to live price updates via SSE (`/api/stream/prices`).
 - The **Spring Boot backend** persists data in PostgreSQL, uses Redis for caching and rate limiting, and publishes domain events (order created, trade executed) to Kafka topics.
-- **Live market prices** are fetched from WhiteBit (on-demand via REST) and Binance (scheduled periodic fetch stored as price ticks).
+- **Live market prices** are fetched from WhiteBit (on-demand via REST). Scheduled periodic fetch stored as price ticks.
 - **Flyway** manages all database schema changes through versioned SQL migrations.
 - In production, **Nginx** acts as a reverse proxy, serving the frontend static build and forwarding `/api/` and `/actuator/` requests to the backend.
 
@@ -97,14 +140,14 @@ crypto-exchange-sim/
 
 ### Prerequisites
 
-| Tool      | Minimum Version | Purpose                                       |
-|-----------|-----------------|-----------------------------------------------|
-| Java      | 21              | Backend compilation and runtime               |
-| Maven     | 3.9+ (wrapper)  | Backend build (wrapper included: `./mvnw`)    |
-| Node.js   | 20              | Frontend build and development server         |
-| npm       | 9+              | Frontend dependency management                |
-| Docker    | 24+             | Infrastructure containers                     |
-| Docker Compose | v2         | Orchestrating Postgres, Redis, Kafka          |
+| Tool           | Purpose                                         |
+|----------------|-------------------------------------------------|
+| Java           | Backend compilation and runtime                 |
+| Maven          | Backend build (wrapper included: `./mvnw`)      |
+| Node.js        | Frontend build and development server           |
+| npm            | Frontend dependency management                  |
+| Docker         | Infrastructure containers                       |
+| Docker Compose | Orchestrating Postgres, Redis, Kafka            |
 
 ### Configuration
 
@@ -136,13 +179,15 @@ JWT_EXPIRATION=86400000
 CORS_ALLOWED_ORIGINS=http://localhost:5173
 
 # Price fetcher
-PRICE_FETCHER_SYMBOLS=BTC,ETH,SOL
 PRICE_FETCHER_INTERVAL_MS=30000
 
 # Rate limits (requests per window)
 RATE_LIMIT_ORDERS=30
+RATE_LIMIT_ORDERS_WINDOW=60s
 RATE_LIMIT_WALLET_DEPOSIT=10
+RATE_LIMIT_WALLET_DEPOSIT_WINDOW=60s
 RATE_LIMIT_WALLET_WITHDRAW=5
+RATE_LIMIT_WALLET_WITHDRAW_WINDOW=60s
 ```
 
 > The backend loads `.env` automatically via its `DotenvConfig` class. No additional tooling is required.
@@ -191,9 +236,7 @@ Interactive API documentation is available via Swagger UI when the backend is ru
 | Swagger UI  | http://localhost:8080/swagger-ui.html             |
 | OpenAPI JSON| http://localhost:8080/v3/api-docs                 |
 
-The Swagger UI supports JWT Bearer authentication -- paste a token obtained from `/api/auth/login` into the Authorize dialog to test authenticated endpoints.
-
-API groups documented in Swagger: **Auth**, **Users**, **Dashboard**, **Wallet**, **Assets**, **Markets**, **Orders**, **Market Orders**, **Trades**, **Transactions**, **Prices**, **Price Stream**, **System**.
+The Swagger UI supports JWT Bearer authentication — paste a token obtained from `/api/auth/login` into the Authorize dialog to test authenticated endpoints.
 
 ---
 
@@ -243,12 +286,6 @@ cd backend
 ./mvnw clean test
 ```
 
-Or via Make:
-
-```bash
-make backend-test
-```
-
 ### Frontend
 
 Lint the frontend codebase:
@@ -256,20 +293,6 @@ Lint the frontend codebase:
 ```bash
 cd frontend
 npm run lint
-```
-
-Or via Make:
-
-```bash
-make frontend-lint
-```
-
-### Full Local CI
-
-Run the complete CI pipeline locally (backend tests, backend build, frontend lint, frontend build):
-
-```bash
-make ci-local
 ```
 
 ---
@@ -280,12 +303,12 @@ make ci-local
 
 The project includes a declarative `Jenkinsfile` with the following stages:
 
-1. **Backend: Test** -- runs `./mvnw clean test` and archives JUnit results.
-2. **Backend: Package** -- builds the JAR (`./mvnw -DskipTests package`) and archives the artifact.
-3. **Frontend: Install** -- installs npm dependencies (`npm ci`).
-4. **Frontend: Lint** -- runs ESLint.
-5. **Frontend: Build** -- builds the production bundle and archives `dist/`.
-6. **Docker Build** (conditional, parallel) -- builds `crypto-backend` and `crypto-frontend` Docker images if Docker is available on the agent.
+1. **Backend: Test** — runs `./mvnw clean test` and archives JUnit results.
+2. **Backend: Package** — builds the JAR (`./mvnw -DskipTests package`) and archives the artifact.
+3. **Frontend: Install** — installs npm dependencies (`npm ci`).
+4. **Frontend: Lint** — runs ESLint.
+5. **Frontend: Build** — builds the production bundle and archives `dist/`.
+6. **Docker Build** (conditional, parallel) — builds `crypto-backend` and `crypto-frontend` Docker images if Docker is available on the agent.
 
 ### Running Jenkins Locally
 
@@ -306,61 +329,3 @@ Stop Jenkins:
 ```bash
 make jenkins-down
 ```
-
-The Jenkins image is based on `jenkins/jenkins:lts` with Node.js 20 and Docker CLI pre-installed.
-
----
-
-## Hosting / Deployment
-
-### `deploy-local/` Directory
-
-The `deploy-local/` directory is excluded from version control (listed in `.gitignore`) and is intended for local-only deployment helpers. It is expected to contain:
-
-| File / Directory             | Purpose                                                    |
-|------------------------------|------------------------------------------------------------|
-| `docker-compose.prod.yml`   | Production-grade Compose file with all services and Nginx   |
-| `nginx/nginx.conf`          | Reverse proxy config (API proxy, SSE support, static files) |
-| `.env.prod`                 | Production environment variables (secrets)                  |
-| `deploy.sh`                 | Deployment script (build, upload, restart on remote host)   |
-| Utility scripts              | Health checks, restart helpers, tunnel setup                |
-
-### Suggested Setup (if `deploy-local/` does not exist)
-
-Create the directory and populate it with the required files:
-
-```bash
-mkdir -p deploy-local/nginx
-```
-
-1. **`docker-compose.prod.yml`** -- define services for `postgres`, `redis`, `zookeeper`, `kafka`, `backend`, and `nginx`. Point Nginx volumes to `./nginx/nginx.conf` and `./frontend/dist`.
-2. **`nginx/nginx.conf`** -- configure an upstream block for the backend (`backend:8080`), proxy `/api/` and `/actuator/` to it, proxy `/api/stream/` with SSE-friendly settings (`proxy_buffering off`), and serve frontend static files with SPA fallback (`try_files $uri $uri/ /index.html`).
-3. **`.env.prod`** -- supply all required environment variables (database credentials, Redis password, JWT secret, CORS origins, Kafka bootstrap servers).
-
-### Running in Production Mode
-
-```bash
-cd deploy-local
-
-# Build backend Docker image
-cd ../backend && docker build -t crypto-exchange-backend:latest . && cd ../deploy-local
-
-# Build frontend
-cd ../frontend && npm ci && npm run build && cd ../deploy-local
-
-# Start all services
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
-```
-
-The application will be available on port 80 (Nginx).
-
-### Docker Images
-
-Build standalone Docker images using Make:
-
-```bash
-make backend-docker    # builds crypto-backend:latest
-make frontend-docker   # builds crypto-frontend:latest
-```
-
-Both images use multi-stage builds to minimize size. The backend image runs as a non-root `spring` user and includes a health check. The frontend image serves the production build via Nginx with SPA routing and API proxy configuration.
