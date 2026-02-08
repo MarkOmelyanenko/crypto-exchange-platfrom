@@ -49,9 +49,9 @@ function WalletPage() {
   });
 
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 700, color: '#111827', margin: 0 }}>Wallet</h1>
+    <div style={{ maxWidth: 800, margin: '0 auto', overflow: 'hidden' }}>
+      <div className="resp-page-header">
+        <h1 className="resp-page-title" style={{ fontSize: 28, fontWeight: 700, color: '#111827', margin: 0 }}>Wallet</h1>
         <Link to="/deposit" style={styles.depositBtn}>+ Deposit USDT</Link>
       </div>
 
@@ -63,10 +63,10 @@ function WalletPage() {
         <>
           {/* USDT / Cash Card */}
           <div style={{ ...styles.card, borderLeft: '4px solid #10b981', marginBottom: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="resp-wallet-card">
               <div>
                 <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 4 }}>USDT (Cash)</div>
-                <div style={{ fontSize: 32, fontWeight: 700, color: '#111827' }}>
+                <div className="resp-price-large" style={{ fontSize: 32, fontWeight: 700, color: '#111827' }}>
                   {fmtUsd(usdtBalance?.available || cashInfo?.cashUsd || 0)}
                 </div>
               </div>
@@ -93,7 +93,7 @@ function WalletPage() {
               <h2 style={{ fontSize: 16, fontWeight: 600, color: '#374151', marginBottom: 16 }}>
                 Asset Holdings
               </h2>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <div className="responsive-table"><table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
                     <th style={styles.th}>Asset</th>
@@ -112,7 +112,7 @@ function WalletPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           )}
 
@@ -147,6 +147,7 @@ const styles = {
     textDecoration: 'none',
     fontSize: 14,
     fontWeight: 600,
+    cursor: 'pointer',
   },
   th: {
     padding: '10px 12px',

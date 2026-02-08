@@ -269,6 +269,10 @@ export function PortfolioPieChart({
           .portfolio-chart-container {
             flex-direction: column !important;
           }
+          .portfolio-chart-area {
+            min-width: 0 !important;
+            width: 100% !important;
+          }
           .portfolio-legend {
             min-width: 100% !important;
             max-width: 100% !important;
@@ -300,10 +304,13 @@ export function PortfolioPieChart({
         }}
       >
       {/* Pie Chart */}
-        <div style={{
+        <div 
+          className="portfolio-chart-area"
+          style={{
           flex: showLegendAsList ? '1 1 auto' : '1 1 0',
-          minWidth: showLegendAsList ? 0 : 300,
-          width: showLegendAsList ? '100%' : 300,
+          minWidth: showLegendAsList ? 0 : 200,
+          width: showLegendAsList ? '100%' : '100%',
+          maxWidth: showLegendAsList ? undefined : 400,
           height: 280,
           display: 'flex',
           justifyContent: 'center',
@@ -335,9 +342,9 @@ export function PortfolioPieChart({
           <div 
             className="portfolio-legend"
             style={{
-              flex: '0 0 auto',
-              minWidth: 280,
-              maxWidth: 320,
+              flex: '1 1 auto',
+              minWidth: 220,
+              maxWidth: 340,
               width: '100%',
             }}
           >

@@ -308,14 +308,14 @@ function TradingPage() {
   };
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 28, fontWeight: 700, color: '#111827', marginBottom: 24 }}>Trade</h1>
+    <div style={{ maxWidth: 1100, margin: '0 auto', overflow: 'hidden' }}>
+      <h1 className="resp-page-title" style={{ fontSize: 28, fontWeight: 700, color: '#111827', marginBottom: 24 }}>Trade</h1>
 
       {/* ─── Pair Selector Header ─── */}
       <div style={styles.headerCard}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
               {loadingPairs ? (
                 <Skeleton height={42} />
               ) : (
@@ -324,7 +324,7 @@ function TradingPage() {
                   <select
                     value={selectedPairId || ''}
                     onChange={handlePairChange}
-                    style={styles.pairSelect}
+                    className="resp-pair-select"
                   >
                     {Object.entries(groupedPairs).map(([quote, group]) => (
                       <optgroup key={quote} label={`── ${quote} pairs ──`}>
@@ -340,8 +340,8 @@ function TradingPage() {
               )}
               <LiveIndicator connected={liveStatus.connected} error={liveStatus.error} />
             </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginTop: 4 }}>
-              <span style={{ fontSize: 32, fontWeight: 700, color: '#111827', fontFamily: 'monospace' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
+              <span className="resp-price-large" style={{ fontSize: 32, fontWeight: 700, color: '#111827', fontFamily: 'monospace' }}>
                 {currentPrice ? fmtPairPrice(currentPrice, quoteSymbol) : '—'}
               </span>
               {change24h != null && (
@@ -389,7 +389,7 @@ function TradingPage() {
       </Section>
 
       {/* ─── Trade Widget + Balances + Recent Trades (2 columns) ─── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+      <div className="resp-grid-2col">
         {/* ── Left: Order Panel ── */}
         <Section title="Place Order">
           <div style={styles.card}>
@@ -431,7 +431,7 @@ function TradingPage() {
                 Available:{' '}
                 <span style={{ fontWeight: 600, color: '#111827' }}>
                   {side === 'BUY'
-                    ? `${fmtQty(avail, 2)} ${selectedPair.quote}`
+                    ? `${fmtQty(avail, isUsdtQuote ? 2 : 8)} ${selectedPair.quote}`
                     : `${fmtQty(avail)} ${selectedPair.base}`}
                 </span>
                 {avail > 0 && (
@@ -472,7 +472,10 @@ function TradingPage() {
                     <button
                       key={pct}
                       type="button"
-                      onClick={() => setAmount(String((avail * pct).toFixed(2)))}
+                      onClick={() => {
+                        const val = avail * pct;
+                        setAmount(isUsdtQuote ? val.toFixed(2) : val.toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
+                      }}
                       style={styles.quickBtn}
                     >
                       {pct === 1 ? 'Max' : `${pct * 100}%`}
@@ -745,18 +748,7 @@ const styles = {
     border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
     marginBottom: 24,
   },
-  pairSelect: {
-    padding: '10px 14px',
-    fontSize: 20,
-    fontWeight: 700,
-    border: '1px solid #d1d5db',
-    borderRadius: 8,
-    backgroundColor: '#fff',
-    outline: 'none',
-    cursor: 'pointer',
-    color: '#111827',
-    minWidth: 200,
-  },
+  /* pairSelect moved to CSS class resp-pair-select */
   card: {
     padding: 16, backgroundColor: '#fff', borderRadius: 8,
     border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
@@ -818,6 +810,7 @@ const styles = {
     fontSize: 16,
     fontWeight: 600,
     transition: 'opacity 0.15s',
+    cursor: 'pointer',
   },
   errorBox: {
     padding: '10px 14px',

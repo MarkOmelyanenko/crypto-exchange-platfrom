@@ -132,7 +132,7 @@ function AssetDetailPage() {
 
   if (errors.asset) {
     return (
-      <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      <div style={{ maxWidth: 900, margin: '0 auto', overflow: 'hidden' }}>
         <Link to="/assets" style={styles.backLink}>← Back to Assets</Link>
         <ErrorBox message={errors.asset} onRetry={loadAsset} />
       </div>
@@ -140,7 +140,7 @@ function AssetDetailPage() {
   }
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ maxWidth: 900, margin: '0 auto', overflow: 'hidden' }}>
       <Link to="/assets" style={styles.backLink}>← Back to Assets</Link>
 
       {/* ─── Asset Header ─── */}
@@ -149,19 +149,19 @@ function AssetDetailPage() {
       ) : asset ? (
         <div style={styles.headerCard}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
                 <CryptoIcon symbol={asset.symbol} size={32} />
-                <h1 style={{ fontSize: 28, fontWeight: 700, color: '#111827', margin: 0 }}>{asset.symbol}</h1>
+                <h1 className="resp-page-title" style={{ fontSize: 28, fontWeight: 700, color: '#111827', margin: 0 }}>{asset.symbol}</h1>
                 <span style={{ fontSize: 16, color: '#6b7280', fontWeight: 400 }}>{asset.name}</span>
                 <LiveIndicator connected={liveConnected} error={liveError} />
               </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginTop: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
                 {displayUnavailable ? (
                   <span style={{ fontSize: 14, color: '#9ca3af' }}>Price temporarily unavailable</span>
                 ) : (
                   <>
-                    <span style={{ fontSize: 32, fontWeight: 700, color: '#111827', fontFamily: 'monospace' }}>
+                    <span className="resp-price-large" style={{ fontSize: 32, fontWeight: 700, color: '#111827', fontFamily: 'monospace' }}>
                       {fmt(displayPrice)}
                     </span>
                     <span style={{
@@ -192,7 +192,7 @@ function AssetDetailPage() {
       ) : null}
 
       {/* ─── Trade Widget + Position (side by side) ─── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 28 }}>
+      <div className="resp-grid-2col" style={{ marginBottom: 28 }}>
         <Section title="Trade">
           {asset && !displayUnavailable ? (
             <TradeWidget
@@ -772,6 +772,7 @@ const styles = {
     fontSize: 16,
     fontWeight: 600,
     transition: 'opacity 0.15s',
+    cursor: 'pointer',
   },
   errorBox: {
     padding: '10px 14px',

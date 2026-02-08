@@ -191,8 +191,8 @@ body {
 }
 
 .balance-value {
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: 0.9rem;
+  font-weight: 600;
   color: var(--success-color);
 }
 
@@ -249,6 +249,8 @@ body {
   font-size: 0.875rem;
   font-weight: 500;
   transition: all 0.2s ease;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .logout-btn:hover {
@@ -503,6 +505,18 @@ body {
   content: '✓';
   color: var(--success-color);
   font-weight: bold;
+}
+
+/* Global button cursor styling */
+button,
+button[type="button"],
+button[type="submit"],
+button[type="reset"] {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
 }
 
 .btn {
@@ -790,7 +804,7 @@ body {
   }
 
   .balance-value {
-    font-size: 0.875rem;
+    font-size: 0.85rem;
   }
 
   .logout-btn {
@@ -874,5 +888,247 @@ body {
 
   .form-container {
     max-width: 550px;
+  }
+}
+
+/* ───── Responsive Layout Utility Classes ───── */
+
+/* Dashboard: Portfolio grid (summary cards | pie chart) */
+.resp-grid-portfolio {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 24px;
+  align-items: start;
+}
+
+/* Dashboard: Split grid (charts | transactions) */
+.resp-grid-split {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+  margin-bottom: 8px;
+}
+
+/* Generic 2-column grid (trade widget, asset detail, etc.) */
+.resp-grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+/* Dashboard: Price charts grid — defaults to auto-fit */
+.resp-grid-charts {
+  display: grid;
+  gap: 16px;
+}
+
+/* Deposit: Limit stats grid */
+.resp-grid-limits {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+/* Transaction detail modal grid */
+.resp-grid-detail {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* Page header: title + actions row */
+.resp-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+/* Wallet USDT card layout */
+.resp-wallet-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Filter bar */
+.resp-filter-bar {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  padding: 16px;
+  background-color: #fff;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+/* System status inline flex */
+.resp-status-grid {
+  display: flex;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+/* Transaction modal */
+.resp-modal {
+  background-color: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  width: 100%;
+  max-width: 520px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  margin: 16px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+/* ───── Tablet breakpoint (max-width: 1024px) ───── */
+@media (max-width: 1024px) {
+  .resp-grid-portfolio {
+    grid-template-columns: 1fr 1.5fr;
+    gap: 16px;
+  }
+
+  .resp-grid-split {
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+}
+
+/* ───── Mobile breakpoint (max-width: 768px) ───── */
+@media (max-width: 768px) {
+  .resp-grid-portfolio,
+  .resp-grid-split,
+  .resp-grid-2col {
+    grid-template-columns: 1fr;
+  }
+
+  .resp-grid-charts {
+    grid-template-columns: 1fr !important;
+  }
+
+  .resp-grid-limits {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .resp-grid-detail {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .resp-page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .resp-page-header > * {
+    width: 100%;
+  }
+
+  .resp-wallet-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .resp-wallet-card > div:last-child {
+    text-align: left;
+  }
+
+  .resp-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .resp-filter-bar .filter-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .resp-status-grid {
+    gap: 16px;
+  }
+
+  .resp-modal {
+    max-width: 100%;
+    margin: 8px;
+    padding: 16px;
+  }
+
+  .resp-modal .resp-grid-detail {
+    grid-template-columns: 1fr;
+  }
+
+  /* Responsive font sizes for page titles */
+  .resp-page-title {
+    font-size: 22px !important;
+  }
+
+  /* Responsive price display */
+  .resp-price-large {
+    font-size: 24px !important;
+  }
+}
+
+/* ───── Small mobile breakpoint (max-width: 480px) ───── */
+@media (max-width: 480px) {
+  .resp-page-title {
+    font-size: 20px !important;
+  }
+
+  .resp-price-large {
+    font-size: 20px !important;
+  }
+
+  .resp-status-grid {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+/* ───── Responsive search input ───── */
+.resp-search-wrapper {
+  position: relative;
+  width: 260px;
+  max-width: 100%;
+}
+
+@media (max-width: 768px) {
+  .resp-search-wrapper {
+    width: 100%;
+  }
+}
+
+.resp-search-wrapper input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ───── Responsive select for trading pair ───── */
+.resp-pair-select {
+  padding: 10px 14px;
+  font-size: 20px;
+  font-weight: 700;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background-color: #fff;
+  outline: none;
+  cursor: pointer;
+  color: #111827;
+  min-width: 160px;
+  max-width: 100%;
+}
+
+@media (max-width: 480px) {
+  .resp-pair-select {
+    font-size: 16px;
+    padding: 8px 10px;
+    min-width: 120px;
   }
 }

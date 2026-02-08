@@ -1,4 +1,7 @@
--- V12: Create trade table for market order history (spot market orders)
+-- V12: Replace old trade table (V1 matching-engine style) with new spot-market trade table
+-- The old trade table (maker_order_id/taker_order_id) is no longer used by the application
+DROP TABLE IF EXISTS trade CASCADE;
+
 CREATE TABLE trade (
     id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id    UUID          NOT NULL REFERENCES user_account(id) ON DELETE CASCADE,

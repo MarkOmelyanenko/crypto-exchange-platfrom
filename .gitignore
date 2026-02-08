@@ -37,3 +37,13 @@ build/
 .env.local
 .env.*.local
 *.env
+.env.prod
+
+### Deploy local (scripts, configs, artifacts) ###
+deploy-local/
+
+### Build artifacts ###
+*.tar.gz
+*.pem
+node_modules/
+frontend/dist/

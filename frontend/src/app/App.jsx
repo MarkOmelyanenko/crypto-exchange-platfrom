@@ -86,7 +86,7 @@ function App() {
           <div className="header-top">
             <Link to="/dashboard" className="header-logo">
               <img src="/logo.png" alt="Logo" className="logo-image" />
-              <span className="logo-text">Crypto Exchange Simulator</span>
+              <span className="logo-text">CryptoSim</span>
             </Link>
             {!isAuthPage && isAuthenticated && (
               <button
@@ -147,7 +147,7 @@ function App() {
           <div className="header-right">
             {/* Cash Balance Badge */}
             <div className="balance-badge">
-              <span className="balance-label">USDT Balance</span>
+              <span className="balance-label">Balance: </span>
               <span className="balance-value">
                 {fmtUsdt(cashBalance?.cashUsd)}
               </span>

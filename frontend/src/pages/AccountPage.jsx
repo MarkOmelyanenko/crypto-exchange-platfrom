@@ -168,7 +168,7 @@ function AccountPage() {
 
   return (
     <div className="account-page-container" style={{ maxWidth: '700px', margin: '2rem auto', padding: '0 1rem' }}>
-      <h1 style={{ marginBottom: '2rem', color: 'var(--text-primary)' }}>Account Settings</h1>
+      <h1 className="resp-page-title" style={{ marginBottom: '2rem', color: 'var(--text-primary)' }}>Account Settings</h1>
 
       {/* Profile Section */}
       <div className="account-section responsive-card" style={{ marginBottom: '2.5rem' }}>

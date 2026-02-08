@@ -70,6 +70,7 @@ export function LastUpdatedIndicator({ lastUpdatedAt }) {
       fontSize: 11,
       color: '#6b7280',
       marginTop: 4,
+      flexWrap: 'wrap',
     }}>
       <span>Last updated</span>
       <span style={{ color: '#9ca3af' }}>•</span>

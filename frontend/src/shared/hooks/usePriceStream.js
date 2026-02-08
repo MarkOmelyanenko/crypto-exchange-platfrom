@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+// Use empty string for production (same domain), localhost for development
+// VITE_API_BASE_URL is set to empty string in production build
+const API_BASE = import.meta.env.VITE_API_BASE_URL !== undefined 
+  ? import.meta.env.VITE_API_BASE_URL 
+  : 'http://localhost:8080';
 
 /**
  * React hook for real-time price streaming via SSE.
@@ -64,6 +68,9 @@ export function usePriceStream(symbols) {
             }
             return next;
           });
+          // Mark as connected when fallback polling successfully receives data
+          setConnected(true);
+          setError(null);
         }
       } catch {
         // Silently fail; will retry on next interval
@@ -126,8 +133,8 @@ export function usePriceStream(symbols) {
 
       setError(`Live disconnected — retrying in ${Math.round(delay / 1000)}s…`);
 
-      // Start fallback polling after 2 failed attempts
-      if (attempt >= 2) {
+      // Start fallback polling after 1 failed attempt
+      if (attempt >= 1) {
         startFallbackPolling();
       }
 

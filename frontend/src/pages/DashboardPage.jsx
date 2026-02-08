@@ -228,9 +228,9 @@ function DashboardPage() {
   }, [loadDashboardData, loadPriceData]);
 
   return (
-    <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+    <div style={{ maxWidth: 1400, margin: '0 auto', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 700, color: '#111827', margin: 0 }}>Dashboard</h1>
+        <h1 className="resp-page-title" style={{ fontSize: 28, fontWeight: 700, color: '#111827', margin: 0 }}>Dashboard</h1>
         <LiveIndicator connected={liveConnected} error={liveError} />
       </div>
 
@@ -239,7 +239,7 @@ function DashboardPage() {
         {(errors.summary || errors.portfolio) ? (
           <ErrorBox message="Failed to load portfolio data" onRetry={loadDashboardData} />
         ) : (
-          <div style={styles.portfolioGrid}>
+          <div className="resp-grid-portfolio">
             {/* Left side: Summary Cards */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <SummaryCard label="Total Portfolio Value" value={fmt(summary?.totalValueUsd)} loading={loading.summary} />
@@ -288,7 +288,7 @@ function DashboardPage() {
       </Section>
 
       {/* ─── Price Charts + Recent Transactions (side by side) ─── */}
-      <div style={styles.splitGrid}>
+      <div className="resp-grid-split">
         <Section title="Price Trends (24h)">
           {loading.chart && priceHistory.length === 0 ? (
             <Skeleton height={300} />
@@ -342,7 +342,7 @@ function SummaryCard({ label, value, valueColor, loading }) {
       {loading ? (
         <div style={styles.skeletonBar} />
       ) : (
-        <div style={{ fontSize: 22, fontWeight: 700, color: valueColor || '#111827', lineHeight: 1.3 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, color: valueColor || '#111827', lineHeight: 1.3, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
           {value ?? '—'}
         </div>
       )}
@@ -406,7 +406,7 @@ function HoldingsTable({ holdings, loading, livePrices = {} }) {
   const sortIcon = (field) => sortBy === field ? (sortAsc ? ' ↑' : ' ↓') : '';
 
   return (
-    <div style={{ overflowX: 'auto' }}>
+    <div className="responsive-table">
       <table style={styles.table}>
         <thead>
           <tr>
@@ -539,7 +539,7 @@ function PriceCharts({ data }) {
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'];
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(data.length, 3)}, 1fr)`, gap: 16 }}>
+    <div className="resp-grid-charts" style={{ gridTemplateColumns: `repeat(${Math.min(data.length, 3)}, 1fr)` }}>
       {data.map(({ symbol, data: history }, idx) => {
         const chartData = history.map(p => ({
           time: new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -613,7 +613,8 @@ function SystemStatusWidget({ health }) {
   const colors = { OK: '#10b981', Down: '#ef4444', 'N/A': '#9ca3af', Unknown: '#f59e0b' };
 
   return (
-    <div style={{ ...styles.card, display: 'flex', gap: 32, flexWrap: 'wrap' }}>
+    <div style={styles.card}>
+      <div className="resp-status-grid">
       {entries.map(([key, value]) => (
         <div key={key} style={{ minWidth: 80 }}>
           <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
@@ -624,6 +625,7 @@ function SystemStatusWidget({ health }) {
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 }
@@ -703,18 +705,7 @@ const styles = {
     gap: 16,
     marginBottom: 28,
   },
-  portfolioGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 2fr',
-    gap: 24,
-    alignItems: 'start',
-  },
-  splitGrid: {
-    display: 'grid',
-    gridTemplateColumns: '2fr 1fr',
-    gap: 24,
-    marginBottom: 8,
-  },
+  /* portfolioGrid and splitGrid moved to CSS classes resp-grid-portfolio and resp-grid-split */
   card: {
     padding: 16,
     backgroundColor: '#fff',
@@ -747,6 +738,7 @@ const styles = {
     borderRadius: 6,
     fontWeight: 500,
     fontSize: 14,
+    cursor: 'pointer',
   },
   retryBtn: {
     padding: '6px 14px',

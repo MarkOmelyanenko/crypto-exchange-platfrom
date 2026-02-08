@@ -64,8 +64,8 @@ function DepositPage() {
   const quickAmounts = [50, 100, 250, 500];
 
   return (
-    <div style={{ maxWidth: 600, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 28, fontWeight: 700, color: '#111827', marginBottom: 24 }}>
+    <div style={{ maxWidth: 600, margin: '0 auto', overflow: 'hidden' }}>
+      <h1 className="resp-page-title" style={{ fontSize: 28, fontWeight: 700, color: '#111827', marginBottom: 24 }}>
         Deposit USDT
       </h1>
 
@@ -78,10 +78,10 @@ function DepositPage() {
           <div style={styles.skeleton} />
         ) : balance ? (
           <div>
-            <div style={{ fontSize: 32, fontWeight: 700, color: '#111827', marginBottom: 16 }}>
+            <div className="resp-price-large" style={{ fontSize: 32, fontWeight: 700, color: '#111827', marginBottom: 16 }}>
               {fmtUsdt(balance.cashUsd)}
             </div>
-            <div style={styles.limitGrid}>
+            <div className="resp-grid-limits">
               <div>
                 <div style={styles.limitLabel}>24h Deposit Limit</div>
                 <div style={styles.limitValue}>{fmtUsdt(balance.depositLimit24h)}</div>
@@ -121,7 +121,7 @@ function DepositPage() {
         </h2>
 
         {/* Quick amount buttons */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
           {quickAmounts.map((qa) => (
             <button
               key={qa}
@@ -203,12 +203,7 @@ const styles = {
     backgroundSize: '200% 100%',
     animation: 'shimmer 1.5s infinite',
   },
-  limitGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: 12,
-    marginBottom: 12,
-  },
+  /* limitGrid moved to CSS class resp-grid-limits */
   limitLabel: {
     fontSize: 12,
     color: '#6b7280',
@@ -232,7 +227,6 @@ const styles = {
     transition: 'width 0.3s ease',
   },
   quickBtn: {
-    flex: 1,
     padding: '8px 12px',
     border: '1px solid #e5e7eb',
     borderRadius: 6,
@@ -240,6 +234,7 @@ const styles = {
     fontSize: 13,
     fontWeight: 500,
     transition: 'all 0.15s',
+    textAlign: 'center',
   },
   label: {
     display: 'block',
@@ -277,6 +272,7 @@ const styles = {
     fontSize: 16,
     fontWeight: 600,
     transition: 'opacity 0.15s',
+    cursor: 'pointer',
   },
   errorBox: {
     padding: '10px 14px',

@@ -1,0 +1,58 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    hikari:
+      maximum-pool-size: 5  # reduced from 10
+      minimum-idle: 2       # reduced from 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 4     # reduced from 8
+          max-idle: 4       # reduced from 8
+          min-idle: 1       # reduced from 2
+          max-wait: 2000ms
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    consumer:
+      group-id: crypto-exchange-sim
+      auto-offset-reset: earliest
+      fetch-min-size: 1
+      fetch-max-wait: 500
+      max-poll-records: 10  # reduced for less memory consumption
+      properties:
+        spring.json.trusted.packages: "com.cryptoexchange.backend.domain.event"
+    producer:
+      acks: 1  # changed from 'all' for faster work
+      retries: 2
+      batch-size: 16384  # smaller batch
+      properties:
+        linger.ms: 10
+
+management:
+  endpoint:
+    health:
+      show-details: never
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    root: INFO
+    com.cryptoexchange: INFO
+    org.springframework.kafka: WARN
+    org.hibernate: WARN
+    org.flywaydb: DEBUG

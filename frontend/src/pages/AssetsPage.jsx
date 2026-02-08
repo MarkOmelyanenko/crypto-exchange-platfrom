@@ -110,19 +110,19 @@ function AssetsPage() {
   };
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+    <div style={{ maxWidth: 1200, margin: '0 auto', overflow: 'hidden' }}>
+      <div className="resp-page-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <h1 style={{ fontSize: 28, fontWeight: 700, color: '#111827', margin: 0 }}>Assets</h1>
+          <h1 className="resp-page-title" style={{ fontSize: 28, fontWeight: 700, color: '#111827', margin: 0 }}>Assets</h1>
           <LiveIndicator connected={liveConnected} error={liveError} />
         </div>
-        <div style={{ position: 'relative' }}>
+        <div className="resp-search-wrapper">
           <input
             type="text"
             placeholder="Search by symbol or name…"
             value={search}
             onChange={handleSearchChange}
-            style={styles.searchInput}
+            style={{ ...styles.searchInput, width: '100%' }}
           />
           {search && (
             <button

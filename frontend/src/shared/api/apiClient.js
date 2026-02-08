@@ -1,7 +1,13 @@
 import axios from 'axios';
 
+// Use empty string for production (same domain), localhost for development
+// VITE_API_BASE_URL is set to empty string in production build
+const baseURL = import.meta.env.VITE_API_BASE_URL !== undefined 
+  ? import.meta.env.VITE_API_BASE_URL 
+  : 'http://localhost:8080';
+
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080',
+  baseURL,
   timeout: 10000,
 });
 

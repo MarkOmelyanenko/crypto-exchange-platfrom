@@ -117,11 +117,11 @@ function TransactionsPage() {
   };
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 20, color: '#111827' }}>Transactions</h1>
+    <div style={{ maxWidth: 1100, margin: '0 auto', overflow: 'hidden' }}>
+      <h1 className="resp-page-title" style={{ fontSize: 28, fontWeight: 700, marginBottom: 20, color: '#111827' }}>Transactions</h1>
 
       {/* ─── Filters ─── */}
-      <div style={styles.filterBar}>
+      <div className="resp-filter-bar">
         <div style={styles.filterGroup}>
           <label style={styles.filterLabel}>Symbol</label>
           <input
@@ -130,19 +130,21 @@ function TransactionsPage() {
             onChange={(e) => setSymbol(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleFilter()}
             placeholder="e.g. BTC, ETH/BTC"
-            style={styles.filterInput}
+            style={{ ...styles.filterInput, width: '100%', minWidth: 100 }}
           />
         </div>
         <div style={styles.filterGroup}>
           <label style={styles.filterLabel}>Side</label>
-          <select value={side} onChange={(e) => { setSide(e.target.value); setPage(0); }} style={styles.filterSelect}>
+          <select value={side} onChange={(e) => { setSide(e.target.value); setPage(0); }} style={{ ...styles.filterSelect, width: '100%' }}>
             <option value="">All</option>
             <option value="BUY">BUY</option>
             <option value="SELL">SELL</option>
           </select>
         </div>
-        <button onClick={handleFilter} style={styles.filterBtn}>Apply</button>
-        <button onClick={() => { setSymbol(''); setSide(''); setPage(0); }} style={styles.clearBtn}>Clear</button>
+        <div className="filter-actions" style={{ display: 'flex', gap: 8 }}>
+          <button onClick={handleFilter} style={styles.filterBtn}>Apply</button>
+          <button onClick={() => { setSymbol(''); setSide(''); setPage(0); }} style={styles.clearFilterBtn}>Clear</button>
+        </div>
       </div>
 
       {/* ─── Error ─── */}
@@ -288,7 +290,7 @@ function Th({ children, align = 'left', sortable, onClick }) {
 function DetailModal({ tx, loading, onClose }) {
   return (
     <div style={styles.overlay} onClick={onClose}>
-      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+      <div className="resp-modal" onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0, color: '#111827' }}>Transaction Details</h2>
           <button onClick={onClose} style={styles.closeBtn}>×</button>
@@ -296,7 +298,7 @@ function DetailModal({ tx, loading, onClose }) {
         {loading ? (
           <Skeleton height={120} />
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div className="resp-grid-detail">
             <DetailRow label="ID" value={tx.id} mono />
             <DetailRow label="Pair" value={tx.pairSymbol || tx.symbol} />
             <DetailRow label="Side" value={<SideBadge side={tx.side} />} />
@@ -360,11 +362,7 @@ function Skeleton({ height = 40 }) {
 /* ──────────────────── styles ──────────────────── */
 
 const styles = {
-  filterBar: {
-    display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap',
-    marginBottom: 20, padding: 16, backgroundColor: '#fff',
-    borderRadius: 8, border: '1px solid #e5e7eb',
-  },
+  /* filterBar moved to CSS class resp-filter-bar */
   filterGroup: { display: 'flex', flexDirection: 'column', gap: 4 },
   filterLabel: { fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' },
   filterInput: {
@@ -379,7 +377,7 @@ const styles = {
     padding: '6px 16px', backgroundColor: '#3b82f6', color: '#fff',
     border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 13, fontWeight: 500,
   },
-  clearBtn: {
+  clearFilterBtn: {
     padding: '6px 16px', backgroundColor: '#f3f4f6', color: '#374151',
     border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer', fontSize: 13, fontWeight: 500,
   },
@@ -414,10 +412,7 @@ const styles = {
     backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex',
     justifyContent: 'center', alignItems: 'center', zIndex: 1000,
   },
-  modal: {
-    backgroundColor: '#fff', borderRadius: 12, padding: 24,
-    width: '100%', maxWidth: 520, boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
-  },
+  /* modal moved to CSS class resp-modal */
   closeBtn: {
     background: 'none', border: 'none', fontSize: 24, cursor: 'pointer',
     color: '#6b7280', lineHeight: 1,
