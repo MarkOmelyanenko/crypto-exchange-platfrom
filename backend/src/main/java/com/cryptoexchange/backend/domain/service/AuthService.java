@@ -11,6 +11,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
+/**
+ * Service for user authentication and registration.
+ * 
+ * <p>Handles user registration with duplicate checking (login and email must be unique),
+ * password hashing, and user authentication. All operations are transactional.
+ * 
+ * <p>Throws {@link IllegalArgumentException} if registration fails due to duplicate credentials.
+ * Throws {@link NotFoundException} if authentication fails (user not found or invalid password).
+ */
 @Service
 @Transactional
 public class AuthService {
@@ -25,34 +34,44 @@ public class AuthService {
         this.passwordEncoder = passwordEncoder;
     }
 
+    /**
+     * Registers a new user account.
+     * 
+     * @param login unique login username
+     * @param email unique email address (stored in lowercase)
+     * @param password plain text password (will be hashed)
+     * @return the created user account
+     * @throws IllegalArgumentException if login or email already exists
+     */
     public UserAccount register(String login, String email, String password) {
-        // Check if login already exists
         if (userAccountRepository.findByLogin(login).isPresent()) {
             throw new IllegalArgumentException("User with login " + login + " already exists");
         }
 
-        // Check if email already exists
         if (userAccountRepository.findByEmail(email.toLowerCase()).isPresent()) {
             throw new IllegalArgumentException("User with email " + email + " already exists");
         }
 
-        // Hash password
         String passwordHash = passwordEncoder.encode(password);
-
-        // Create user
         UserAccount user = new UserAccount(login, email.toLowerCase(), passwordHash);
         UserAccount saved = userAccountRepository.save(user);
         log.info("Registered user: {} (id: {})", login, saved.getId());
         return saved;
     }
 
+    /**
+     * Authenticates a user by login/email and password.
+     * 
+     * @param loginOrEmail user login or email (case-insensitive for email)
+     * @param password plain text password
+     * @return the authenticated user account
+     * @throws NotFoundException if user not found or password is invalid
+     */
     @Transactional(readOnly = true)
     public UserAccount authenticate(String loginOrEmail, String password) {
-        // Try to find user by login or email (case-insensitive for email)
         UserAccount user = userAccountRepository.findByLoginOrEmail(loginOrEmail)
                 .orElseThrow(() -> new NotFoundException("Invalid credentials"));
 
-        // Verify password
         if (!passwordEncoder.matches(password, user.getPasswordHash())) {
             throw new NotFoundException("Invalid credentials");
         }
@@ -61,6 +80,13 @@ public class AuthService {
         return user;
     }
 
+    /**
+     * Retrieves a user by ID.
+     * 
+     * @param userId the user ID
+     * @return the user account
+     * @throws NotFoundException if user not found
+     */
     @Transactional(readOnly = true)
     public UserAccount getUserById(UUID userId) {
         return userAccountRepository.findById(userId)

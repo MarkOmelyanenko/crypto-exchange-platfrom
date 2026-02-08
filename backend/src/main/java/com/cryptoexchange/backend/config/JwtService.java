@@ -12,6 +12,15 @@ import java.util.Date;
 import java.util.UUID;
 import java.util.function.Function;
 
+/**
+ * Service for JWT token generation and validation.
+ * 
+ * <p>Handles creation and parsing of JWT tokens used for stateless authentication.
+ * Tokens contain the user ID as the subject claim and are signed using HMAC-SHA.
+ * 
+ * <p>Token expiration is configured via {@code jwt.expiration} property (milliseconds).
+ * Secret key is configured via {@code jwt.secret} property.
+ */
 @Service
 public class JwtService {
 

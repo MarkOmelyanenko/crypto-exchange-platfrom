@@ -10,6 +10,12 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * REST controller for user dashboard data.
+ * 
+ * <p>Provides endpoints for portfolio summary, holdings, and recent transactions.
+ * All endpoints require authentication and extract user ID from JWT token.
+ */
 @RestController
 @RequestMapping("/api/dashboard")
 @Tag(name = "Dashboard", description = "Dashboard endpoints")

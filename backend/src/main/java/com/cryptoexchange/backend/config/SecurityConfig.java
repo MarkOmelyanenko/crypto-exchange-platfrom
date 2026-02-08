@@ -22,8 +22,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Security configuration for the application.
- * Allows public access to Swagger UI, OpenAPI docs, and Actuator health endpoints.
+ * Spring Security configuration for JWT-based authentication.
+ * 
+ * <p>Configures:
+ * <ul>
+ *   <li>Stateless JWT authentication (no sessions)</li>
+ *   <li>CORS settings for frontend access</li>
+ *   <li>Public endpoints: auth, health, prices, Swagger UI, Actuator</li>
+ *   <li>All other endpoints require JWT authentication</li>
+ *   <li>CSRF disabled (stateless API)</li>
+ * </ul>
+ * 
+ * <p>CORS allowed origins are configured via {@code CORS_ALLOWED_ORIGINS} environment variable
+ * (comma-separated, defaults to {@code http://localhost:5173}).
  */
 @Configuration
 @EnableWebSecurity
@@ -38,25 +49,33 @@ public class SecurityConfig {
 		this.jwtAuthenticationFilter = jwtAuthenticationFilter;
 	}
 
+	/**
+	 * Configures the security filter chain with JWT authentication.
+	 * 
+	 * <p>Public endpoints (no authentication required):
+	 * <ul>
+	 *   <li>{@code /api/auth/**} - Authentication endpoints</li>
+	 *   <li>{@code /api/system/health} - System health check</li>
+	 *   <li>{@code /api/prices/**} - Price data (read-only)</li>
+	 *   <li>{@code /api/stream/**} - Price stream (SSE, read-only)</li>
+	 *   <li>{@code /swagger-ui/**}, {@code /v3/api-docs/**} - API documentation</li>
+	 *   <li>{@code /actuator/health/**}, {@code /actuator/info} - Monitoring endpoints</li>
+	 * </ul>
+	 * 
+	 * <p>All other endpoints require valid JWT token in Authorization header.
+	 * Unauthenticated requests receive 401 JSON response (not redirect).
+	 */
 	@Bean
 	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 		http
-			// Disable CSRF for stateless JWT authentication
 			.csrf(csrf -> csrf.disable())
-			// Enable CORS for frontend access
 			.cors(cors -> cors.configurationSource(corsConfigurationSource()))
-			// Stateless session management
 			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 			.authorizeHttpRequests(authorize -> authorize
-				// Allow public access to auth endpoints
 				.requestMatchers("/api/auth/**").permitAll()
-				// Allow public access to system health (for monitoring and dashboard)
 				.requestMatchers("/api/system/health").permitAll()
-				// Allow public access to price endpoints (read-only market data)
 				.requestMatchers("/api/prices/**").permitAll()
-				// Allow public access to SSE price stream (read-only market data)
 				.requestMatchers("/api/stream/**").permitAll()
-				// Allow public access to Swagger UI and OpenAPI endpoints
 				.requestMatchers(
 					"/swagger-ui.html",
 					"/swagger-ui/**",
@@ -64,15 +83,10 @@ public class SecurityConfig {
 					"/swagger-resources/**",
 					"/webjars/**"
 				).permitAll()
-				// Allow public access to Actuator health endpoints
 				.requestMatchers("/actuator/health/**").permitAll()
 				.requestMatchers("/actuator/info").permitAll()
-				.requestMatchers("/api/system/health").permitAll()
-				.requestMatchers("/api/prices/**").permitAll()
-				// All other requests require authentication
 				.anyRequest().authenticated()
 			)
-			// Return 401 JSON for unauthenticated requests (instead of 403 or redirect)
 			.exceptionHandling(ex -> ex
 				.authenticationEntryPoint((request, response, authException) -> {
 					response.setContentType(MediaType.APPLICATION_JSON_VALUE);
@@ -83,18 +97,24 @@ public class SecurityConfig {
 							   "path", request.getRequestURI()));
 				})
 			)
-			// Add JWT filter before UsernamePasswordAuthenticationFilter
 			.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-			// Disable HTTP Basic authentication popup
 			.httpBasic(httpBasic -> httpBasic.disable());
 
 		return http.build();
 	}
 
+	/**
+	 * Configures CORS to allow frontend access.
+	 * 
+	 * <p>Origins are parsed from {@code CORS_ALLOWED_ORIGINS} env var (comma-separated).
+	 * Defaults to {@code http://localhost:5173} if not set.
+	 * 
+	 * <p>Allows all HTTP methods and headers, with credentials enabled.
+	 * Exposes Authorization header for JWT tokens.
+	 */
 	@Bean
 	public CorsConfigurationSource corsConfigurationSource() {
 		CorsConfiguration configuration = new CorsConfiguration();
-		// Parse comma-separated origins from env var, default to localhost:5173
 		List<String> allowedOrigins = Arrays.asList(corsAllowedOrigins.split("\\s*,\\s*"));
 		configuration.setAllowedOrigins(allowedOrigins);
 		configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));

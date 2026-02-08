@@ -17,24 +17,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * All tests should be hermetic and offline.
  */
 @org.junit.jupiter.api.Disabled("Requires H2 database and Redis - use pure unit tests instead")
-// @SpringBootTest - Removed to prevent Spring context loading
-// @TestPropertySource(properties = {
-    // "spring.datasource.url=jdbc:h2:mem:testdb_ratelimit;DB_CLOSE_DELAY=-1;MODE=PostgreSQL",
-    // "spring.datasource.driver-class-name=org.h2.Driver",
-    // "spring.datasource.username=sa",
-    // "spring.datasource.password=",
-    // "spring.jpa.hibernate.ddl-auto=create-drop",
-    // "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
-    // "spring.jpa.properties.hibernate.hbm2ddl.auto=create-drop",
-    // "spring.jpa.properties.hibernate.globally_quoted_identifiers=true",
-    // "spring.flyway.enabled=false",
-    // "app.ratelimit.enabled=true",
-    // "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration",
-    // "KAFKA_BOOTSTRAP_SERVERS=localhost:9092",
-    // "management.health.kafka.enabled=false",
-    // "spring.data.redis.host=localhost",
-    // "spring.data.redis.port=6379"
-// })
 class RateLimitServiceTest {
 
     @Autowired(required = false)

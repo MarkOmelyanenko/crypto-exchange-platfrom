@@ -22,6 +22,17 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * REST controller for spot market order execution.
+ * 
+ * <p>Provides endpoints for executing immediate market orders (BUY/SELL) at current market prices.
+ * Market orders execute immediately and do not require a price specification.
+ * 
+ * <p>For BUY orders, provide {@code quoteAmount} (amount of quote currency to spend).
+ * For SELL orders, provide {@code baseAmount} (amount of base currency to sell).
+ * 
+ * <p>All endpoints require authentication and extract user ID from JWT token.
+ */
 @RestController
 @RequestMapping("/api/orders")
 @Tag(name = "Market Orders", description = "Spot market order endpoints")

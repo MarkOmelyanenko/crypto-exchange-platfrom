@@ -21,6 +21,15 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.util.UUID;
 
+/**
+ * REST controller for limit order management.
+ * 
+ * <p>Provides endpoints for creating, querying, and canceling limit orders.
+ * Orders are placed on markets and require sufficient balance in the appropriate
+ * currency (quote currency for BUY orders, base currency for SELL orders).
+ * 
+ * <p>All endpoints require authentication. User ID is passed as a request parameter.
+ */
 @RestController
 @RequestMapping("/api/orders")
 @Tag(name = "Orders", description = "Order management endpoints")

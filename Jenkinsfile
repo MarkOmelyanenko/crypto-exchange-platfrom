@@ -7,7 +7,7 @@ pipeline {
 
     stages {
 
-        // ── Backend ────────────────────────────────────────────
+        // Backend
 
         stage('Backend: Test') {
             steps {
@@ -31,7 +31,7 @@ pipeline {
             }
         }
 
-        // ── Frontend ───────────────────────────────────────────
+        // Frontend 
 
         stage('Frontend: Install') {
             steps {
@@ -59,7 +59,7 @@ pipeline {
             }
         }
 
-        // ── Docker Images ──────────────────────────────────────
+        // Docker Images
 
         stage('Docker Build') {
             when {

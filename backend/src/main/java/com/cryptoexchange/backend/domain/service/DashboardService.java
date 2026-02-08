@@ -17,6 +17,21 @@ import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Service for aggregating user portfolio and transaction data for dashboard display.
+ * 
+ * <p>Calculates portfolio metrics including:
+ * <ul>
+ *   <li>Total portfolio value (all assets converted to USD)</li>
+ *   <li>Available cash (USDT balance)</li>
+ *   <li>Realized and unrealized PnL</li>
+ *   <li>Holdings with cost basis and current market value</li>
+ *   <li>Recent transaction history</li>
+ * </ul>
+ * 
+ * <p>All read operations are transactional read-only for consistency.
+ * Price data is fetched from WhiteBit API with fallback to database.
+ */
 @Service
 @Transactional
 public class DashboardService {
@@ -55,13 +70,18 @@ public class DashboardService {
     }
 
     /**
-     * Get dashboard summary: total value, cash, PnL
+     * Calculates dashboard summary with total portfolio value, cash, and PnL metrics.
+     * 
+     * <p>Aggregates all user balances, converts to USD using current market prices,
+     * and calculates realized (from completed trades) and unrealized (from current holdings) PnL.
+     * 
+     * @param userId the user ID
+     * @return summary with total value, cash, and PnL metrics (all in USD)
      */
     @Transactional(readOnly = true)
     public DashboardSummary getSummary(UUID userId) {
         List<Balance> balances = balanceRepository.findAllByUserId(userId);
 
-        // Find USDT asset safely — brand-new setups may not have it yet
         UUID usdtAssetId = null;
         try {
             usdtAssetId = assetService.getAssetBySymbol("USDT").getId();
@@ -74,10 +94,8 @@ public class DashboardService {
         BigDecimal unrealizedPnlUsd = BigDecimal.ZERO;
         BigDecimal totalCostBasis = BigDecimal.ZERO;
 
-        // Get current prices for all assets (in USDT)
         Map<String, BigDecimal> currentPrices = getCurrentPrices();
 
-        // Calculate holdings value and cost basis
         for (Balance balance : balances) {
             Asset asset = balance.getAsset();
             BigDecimal quantity = balance.getAvailable().add(balance.getLocked());
@@ -87,16 +105,13 @@ public class DashboardService {
             }
 
             if (usdtAssetId != null && asset.getId().equals(usdtAssetId)) {
-                // USDT is already in USD
                 availableCashUsd = availableCashUsd.add(quantity);
                 totalValueUsd = totalValueUsd.add(quantity);
             } else {
-                // Get current price in USDT
                 BigDecimal currentPrice = currentPrices.getOrDefault(asset.getSymbol(), BigDecimal.ZERO);
                 BigDecimal marketValue = quantity.multiply(currentPrice, MC);
                 totalValueUsd = totalValueUsd.add(marketValue);
 
-                // Calculate average buy price and cost basis (USDT-converted)
                 BigDecimal avgBuyPrice = calculateAverageBuyPrice(userId, asset.getId(), currentPrices);
                 BigDecimal costBasis = quantity.multiply(avgBuyPrice, MC);
                 totalCostBasis = totalCostBasis.add(costBasis);
@@ -104,10 +119,7 @@ public class DashboardService {
             }
         }
 
-        // Calculate realized PnL from trades
         BigDecimal realizedPnlUsd = calculateRealizedPnl(userId, currentPrices);
-
-        // Calculate unrealized PnL percentage
         BigDecimal unrealizedPnlPercent = BigDecimal.ZERO;
         if (totalCostBasis.compareTo(BigDecimal.ZERO) > 0) {
             unrealizedPnlPercent = unrealizedPnlUsd
@@ -125,7 +137,13 @@ public class DashboardService {
     }
 
     /**
-     * Get user holdings with current prices and PnL
+     * Returns list of user holdings with current prices and PnL calculations.
+     * 
+     * <p>Excludes USDT (treated as cash) and zero balances.
+     * Each holding includes quantity, average buy price, current price, market value, and unrealized PnL.
+     * 
+     * @param userId the user ID
+     * @return list of holdings sorted by asset symbol
      */
     @Transactional(readOnly = true)
     public List<Holding> getHoldings(UUID userId) {
@@ -145,7 +163,6 @@ public class DashboardService {
             Asset asset = balance.getAsset();
             BigDecimal quantity = balance.getAvailable().add(balance.getLocked());
 
-            // Skip zero balances and USDT (cash)
             if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
                 continue;
             }
@@ -182,14 +199,18 @@ public class DashboardService {
     }
 
     /**
-     * Get recent transactions for user — merges legacy Orders, Transaction records,
-     * and market-order Trade records, sorted by date descending, limited to {@code limit} entries.
+     * Returns recent transactions for user, merging multiple sources.
+     * 
+     * <p>Combines Transaction records, Order records, and Trade records from market orders,
+     * sorted by timestamp descending, limited to specified count.
+     * 
+     * @param userId the user ID
+     * @param limit maximum number of transactions to return
+     * @return list of transaction summaries sorted by date (newest first)
      */
     @Transactional(readOnly = true)
     public List<TransactionSummary> getRecentTransactions(UUID userId, int limit) {
         List<TransactionSummary> summaries = new ArrayList<>();
-
-        // 1) New Transaction entity records
         Page<Transaction> txPage = transactionRepository.findAllByUserId(
                 userId,
                 PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt")));
@@ -206,7 +227,6 @@ public class DashboardService {
             ));
         }
 
-        // 2) Legacy Order-based records
         Page<Order> ordersPage = orderRepository.findAllByUserId(
                 userId,
                 PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt")));
@@ -235,13 +255,12 @@ public class DashboardService {
             ));
         }
 
-        // 3) Market-order Trade records (from Trading page)
         Page<Trade> tradePage = tradeRepository.findByUserIdOrderByCreatedAtDesc(
                 userId,
                 PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt")));
 
         for (Trade trade : tradePage.getContent()) {
-            String pairSymbol = trade.getPair().getSymbol(); // e.g., "ETH/BTC"
+            String pairSymbol = trade.getPair().getSymbol();
             summaries.add(new TransactionSummary(
                 trade.getId(),
                 trade.getSide().name(),
@@ -252,8 +271,6 @@ public class DashboardService {
                 "COMPLETED"
             ));
         }
-
-        // Sort merged list by timestamp descending & limit
         summaries.sort(Comparator.comparing((TransactionSummary s) -> s.timestamp).reversed());
         return summaries.stream().limit(limit).collect(Collectors.toList());
     }
@@ -284,15 +301,12 @@ public class DashboardService {
         BigDecimal totalQuantity = BigDecimal.ZERO;
         BigDecimal totalCost = BigDecimal.ZERO; // always in USDT
 
-        // ── 1) Trade records (market orders + order-matching engine) ──
         List<Market> allMarkets = marketService.listActiveMarkets();
 
-        // Markets where the tracked asset is the BASE (BUY = acquire, SELL = dispose)
         List<Market> baseMarkets = allMarkets.stream()
             .filter(m -> m.getBaseAsset().getId().equals(assetId))
             .collect(Collectors.toList());
 
-        // Markets where the tracked asset is the QUOTE (SELL on market = receive quote = acquire)
         List<Market> quoteMarkets = allMarkets.stream()
             .filter(m -> m.getQuoteAsset().getId().equals(assetId))
             .collect(Collectors.toList());
@@ -315,18 +329,15 @@ public class DashboardService {
             boolean isQuoteMarket = quoteMarketIds.contains(trade.getPair().getId());
 
             if (isQuoteMarket) {
-                // ── Asset is the QUOTE of this market ──
-                // SELL on market → user sold base, received quote → ACQUIRE our asset
-                // BUY on market → user bought base, spent quote → DISPOSE our asset
+                // Asset is the QUOTE: SELL = acquire quote, BUY = dispose quote
                 if (trade.getSide() == OrderSide.SELL) {
                     BigDecimal qty = trade.getQuoteQty();
-                    // Cost in USDT ≈ baseQty × current USDT price of the base asset
                     String baseSymbol = trade.getPair().getBaseAsset().getSymbol();
                     BigDecimal baseUsdPrice = currentPrices.getOrDefault(baseSymbol, BigDecimal.ZERO);
                     BigDecimal costUsd = trade.getBaseQty().multiply(baseUsdPrice, MC);
                     totalQuantity = totalQuantity.add(qty);
                     totalCost = totalCost.add(costUsd);
-                } else { // BUY — user spent quote (our asset) → reduce position
+                } else {
                     BigDecimal qty = trade.getQuoteQty();
                     if (totalQuantity.compareTo(BigDecimal.ZERO) > 0) {
                         BigDecimal avgCost = totalCost.divide(totalQuantity, MC);
@@ -338,7 +349,7 @@ public class DashboardService {
                     }
                 }
             } else {
-                // ── Asset is the BASE of this market (existing logic, with USDT conversion) ──
+                // Asset is the BASE: BUY = acquire base, SELL = dispose base
                 String quoteSymbol = trade.getPair().getQuoteAsset().getSymbol();
                 BigDecimal quoteToUsd = "USDT".equals(quoteSymbol) ? BigDecimal.ONE
                     : currentPrices.getOrDefault(quoteSymbol, BigDecimal.ZERO);
@@ -362,7 +373,7 @@ public class DashboardService {
             }
         }
 
-        // ── 2) New Transaction records (instant buy/sell — always USDT-denominated) ──
+        // Transaction records (instant buy/sell, always USDT-denominated)
         try {
             Asset asset = assetService.getAsset(assetId);
             Page<Transaction> txPage = transactionRepository.findFiltered(
@@ -538,7 +549,6 @@ public class DashboardService {
             symbols.add(market.getBaseAsset().getSymbol());
         }
 
-        // 1) Batch-fetch from WhiteBit (single API call for ALL tickers, cached 5s)
         try {
             List<String> whiteBitSymbols = symbols.stream()
                 .map(whiteBitService::toWhiteBitSymbol)
@@ -561,7 +571,6 @@ public class DashboardService {
             log.warn("Failed to batch-fetch prices from WhiteBit: {}", e.getMessage());
         }
 
-        // 2) Fallback to PriceTick DB (WhiteBit-fetched ticks stored by scheduled job)
         for (String symbol : symbols) {
             if (!prices.containsKey(symbol)) {
                 priceTickRepository.findFirstBySymbolOrderByTsDesc(symbol)
@@ -571,8 +580,6 @@ public class DashboardService {
                     });
             }
         }
-
-        // 3) Fallback to MarketTick DB (simulator ticks)
         for (Market market : markets) {
             String baseSymbol = market.getBaseAsset().getSymbol();
             if (!prices.containsKey(baseSymbol)) {

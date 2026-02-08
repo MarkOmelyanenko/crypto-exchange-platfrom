@@ -23,6 +23,23 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Service for managing limit orders on the exchange.
+ * 
+ * <p>Handles order placement, cancellation, and trade settlement. All operations are transactional.
+ * 
+ * <p>Key responsibilities:
+ * <ul>
+ *   <li>Validates orders (amount, price, market status)</li>
+ *   <li>Reserves funds when placing orders (quote currency for BUY, base currency for SELL)</li>
+ *   <li>Releases funds when canceling orders</li>
+ *   <li>Settles trades by transferring funds between buyer and seller</li>
+ *   <li>Publishes domain events for order creation (sent to Kafka after transaction commit)</li>
+ * </ul>
+ * 
+ * <p>Throws {@link InvalidOrderException} for invalid order parameters or operations.
+ * Throws {@link NotFoundException} if order or user not found.
+ */
 @Service
 @Transactional
 public class OrderService {
@@ -45,9 +62,30 @@ public class OrderService {
         this.eventPublisher = eventPublisher;
     }
 
+    /**
+     * Places a new limit order on the exchange.
+     * 
+     * <p>Validates order parameters, normalizes amounts to asset scales, reserves funds,
+     * and publishes a domain event for order matching. The event is sent to Kafka after
+     * the transaction commits.
+     * 
+     * <p>Funds are reserved based on order side:
+     * <ul>
+     *   <li>BUY orders: reserve quote currency (e.g., USDT)</li>
+     *   <li>SELL orders: reserve base currency (e.g., BTC)</li>
+     * </ul>
+     * 
+     * @param userId the user placing the order
+     * @param marketId the market to trade on
+     * @param side BUY or SELL
+     * @param type LIMIT (price required) or MARKET
+     * @param price order price (required for LIMIT orders)
+     * @param amount order quantity
+     * @return the created order with status NEW
+     * @throws InvalidOrderException if validation fails or funds cannot be reserved
+     */
     public Order placeOrder(UUID userId, UUID marketId, OrderSide side, OrderType type, 
                            BigDecimal price, BigDecimal amount) {
-        // Validation
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new InvalidOrderException("Order amount must be positive");
         }
@@ -65,41 +103,45 @@ public class OrderService {
             throw new InvalidOrderException("Cannot place order on inactive market: " + market.getSymbol());
         }
         
-        // Apply scale normalization (quantity to baseAsset.scale, price to quoteAsset.scale)
         BigDecimal normalizedQuantity = MoneyUtils.normalizeWithScaleDown(amount, market.getBaseAsset().getScale());
         BigDecimal normalizedPrice = price != null 
             ? MoneyUtils.normalizeWithScaleDown(price, market.getQuoteAsset().getScale())
             : null;
         
-        // Create order first
         Order order = new Order(user, market, side, type, normalizedPrice, normalizedQuantity);
-        order.setStatus(OrderStatus.NEW); // Set status to NEW (OPEN) for matching
+        order.setStatus(OrderStatus.NEW);
         order = orderRepository.save(order);
         
-        // Reserve funds based on order side
         try {
             if (side == OrderSide.BUY) {
-                // BUY order: reserve quote currency (e.g., USDT)
                 BigDecimal reservedAmount = MoneyUtils.normalize(normalizedPrice.multiply(normalizedQuantity));
                 walletService.reserveForOrder(userId, market.getQuoteAsset().getId(), reservedAmount, order.getId());
             } else {
-                // SELL order: reserve base currency (e.g., BTC)
                 BigDecimal reservedAmount = MoneyUtils.normalize(normalizedQuantity);
                 walletService.reserveForOrder(userId, market.getBaseAsset().getId(), reservedAmount, order.getId());
             }
         } catch (Exception e) {
-            // If reservation fails, the transaction will rollback and order won't be saved
             log.error("Failed to reserve funds for order {}: {}", order.getId(), e.getMessage());
             throw new InvalidOrderException("Failed to reserve funds: " + e.getMessage());
         }
         
-        // Publish domain event - will be sent to Kafka AFTER transaction commit
         eventPublisher.publishEvent(new DomainOrderCreated(this, order.getId(), market.getSymbol(), side.name()));
         log.debug("Published DomainOrderCreated event for order {} (will be sent to Kafka after commit)", order.getId());
         
         return order;
     }
 
+    /**
+     * Cancels an order and releases reserved funds.
+     * 
+     * <p>Only orders with status NEW or PARTIALLY_FILLED can be canceled.
+     * Releases the remaining reserved amount (unfilled portion) back to available balance.
+     * 
+     * @param orderId the order to cancel
+     * @return the canceled order
+     * @throws NotFoundException if order not found
+     * @throws InvalidOrderException if order cannot be canceled (wrong status)
+     */
     public Order cancelOrder(UUID orderId) {
         Order order = orderRepository.findById(orderId)
             .orElseThrow(() -> new NotFoundException("Order not found with id: " + orderId));
@@ -110,25 +152,20 @@ public class OrderService {
                     order.getStatus()));
         }
         
-        // Calculate remaining reserved amount
         BigDecimal remainingAmount = order.getAmount().subtract(order.getFilledAmount());
         
-        // Release reserved funds
         try {
             if (order.getSide() == OrderSide.BUY) {
-                // BUY order: release quote currency
                 BigDecimal reservedAmount = MoneyUtils.normalize(order.getPrice().multiply(remainingAmount));
                 walletService.releaseReservation(order.getUser().getId(), 
                     order.getMarket().getQuoteAsset().getId(), reservedAmount, orderId);
             } else {
-                // SELL order: release base currency
                 BigDecimal reservedAmount = MoneyUtils.normalize(remainingAmount);
                 walletService.releaseReservation(order.getUser().getId(), 
                     order.getMarket().getBaseAsset().getId(), reservedAmount, orderId);
             }
         } catch (Exception e) {
             log.error("Failed to release reservation for order {}: {}", orderId, e.getMessage());
-            // Continue with cancellation even if release fails (may have been already released)
         }
         
         order.setStatus(OrderStatus.CANCELED);
@@ -174,8 +211,20 @@ public class OrderService {
     }
     
     /**
-     * Settles a trade execution. Transfers funds between buyer and seller and captures reserved amounts.
-     * This method should be called when a trade is executed.
+     * Settles a trade execution by transferring funds between buyer and seller.
+     * 
+     * <p>Captures reserved funds and credits the appropriate currencies:
+     * <ul>
+     *   <li>Buyer: captures reserved quote currency, receives base currency</li>
+     *   <li>Seller: captures reserved base currency, receives quote currency</li>
+     * </ul>
+     * 
+     * <p>This method should be called atomically when a trade is executed.
+     * 
+     * @param buyerOrder the buyer's order
+     * @param sellerOrder the seller's order
+     * @param tradeAmount the amount of base currency traded
+     * @param tradePrice the execution price
      */
     public void settleTrade(Order buyerOrder, Order sellerOrder, BigDecimal tradeAmount, BigDecimal tradePrice) {
         Market market = buyerOrder.getMarket();
@@ -186,11 +235,9 @@ public class OrderService {
         BigDecimal normalizedPrice = MoneyUtils.normalize(tradePrice);
         BigDecimal quoteAmount = MoneyUtils.normalize(normalizedPrice.multiply(normalizedAmount));
         
-        // Buyer: capture reserved quote currency, credit base currency
         walletService.captureReserved(buyerId, market.getQuoteAsset().getId(), quoteAmount, buyerOrder.getId());
         walletService.deposit(buyerId, market.getBaseAsset().getId(), normalizedAmount);
         
-        // Seller: capture reserved base currency, credit quote currency
         walletService.captureReserved(sellerId, market.getBaseAsset().getId(), normalizedAmount, sellerOrder.getId());
         walletService.deposit(sellerId, market.getQuoteAsset().getId(), quoteAmount);
         

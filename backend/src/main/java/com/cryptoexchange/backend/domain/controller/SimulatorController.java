@@ -11,7 +11,12 @@ import java.util.Map;
 
 /**
  * Admin endpoints for controlling the market simulator.
- * TODO: Add authentication/authorization in production.
+ * 
+ * <p>Provides endpoints to start, stop, and query the status of the market price simulator.
+ * Only available when {@code app.simulator.enabled=true}.
+ * 
+ * <p><b>Security Note:</b> These endpoints should be protected with authentication/authorization
+ * in production environments. Currently accessible without authentication for development.
  */
 @RestController
 @RequestMapping("/api/admin/simulator")

@@ -19,6 +19,19 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * REST controller for wallet and balance management.
+ * 
+ * <p>Provides endpoints for:
+ * <ul>
+ *   <li>Querying user balances across all assets</li>
+ *   <li>Depositing USD cash (with 24h rolling limit of 1,000 USDT)</li>
+ *   <li>Depositing/withdrawing funds by currency (simulation-friendly)</li>
+ * </ul>
+ * 
+ * <p>Most endpoints require authentication and extract user ID from JWT token.
+ * Some endpoints accept userId as request parameter for backward compatibility.
+ */
 @RestController
 @RequestMapping("/api/wallet")
 @Tag(name = "Wallet", description = "Wallet and balance management endpoints")

@@ -15,7 +15,16 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Authentication endpoints for login and registration.
+ * REST controller for user authentication and registration.
+ * 
+ * <p>Provides endpoints for:
+ * <ul>
+ *   <li>User registration with email and password</li>
+ *   <li>User login with login/email and password</li>
+ * </ul>
+ * 
+ * <p>All endpoints are publicly accessible (no authentication required).
+ * Returns JWT tokens upon successful authentication.
  */
 @RestController
 @RequestMapping("/api/auth")

@@ -19,6 +19,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * REST controller for cryptocurrency price data.
+ * 
+ * <p>Provides endpoints for current price snapshots and historical price data.
+ * Uses a fallback strategy: WhiteBit API → PriceTick DB → MarketTick DB (simulator).
+ * 
+ * <p>All endpoints are publicly accessible (no authentication required).
+ */
 @RestController
 @RequestMapping("/api/prices")
 @Tag(name = "Prices", description = "Price endpoints")
@@ -48,21 +56,18 @@ public class PriceController {
             BigDecimal price = null;
             OffsetDateTime timestamp = OffsetDateTime.now();
 
-            // 1) Try WhiteBit API for real-time prices
             String whiteBitSymbol = whiteBitService.toWhiteBitSymbol(assetSymbol);
             price = whiteBitService.getCurrentPrice(whiteBitSymbol);
 
             if (price != null) {
                 log.debug("Got price from WhiteBit for {}: {}", assetSymbol, price);
             } else {
-                // 2) Fallback to PriceTick DB (WhiteBit-fetched ticks)
                 Optional<PriceTick> latestPriceTick = priceTickRepository.findFirstBySymbolOrderByTsDesc(assetSymbol);
                 if (latestPriceTick.isPresent()) {
                     price = latestPriceTick.get().getPriceUsd();
                     timestamp = latestPriceTick.get().getTs();
                     log.debug("Got price from PriceTick DB for {}: {}", assetSymbol, price);
                 } else {
-                    // 3) Fallback to MarketTick DB (simulator ticks)
                     String marketSymbol = assetSymbol + "/USDT";
                     Optional<MarketTick> latestTick = marketTickRepository.findFirstByMarketSymbolOrderByTsDesc(marketSymbol);
                     if (latestTick.isPresent()) {
@@ -72,8 +77,6 @@ public class PriceController {
                     }
                 }
             }
-
-            // If no price source available, return null price (frontend handles it)
             snapshots.add(new PriceSnapshot(assetSymbol, price, timestamp));
         }
 
@@ -93,7 +96,6 @@ public class PriceController {
 
         List<PriceHistoryPoint> history = new ArrayList<>();
 
-        // 1) Try WhiteBit klines API for real price history
         String interval = getWhiteBitInterval(range);
         int limit = getWhiteBitLimit(range);
 
@@ -109,7 +111,6 @@ public class PriceController {
             log.debug("Got {} price points from WhiteBit for {}", history.size(), assetSymbol);
         }
 
-        // 2) Fallback to PriceTick DB (WhiteBit-fetched ticks stored by scheduled job)
         if (history.isEmpty()) {
             List<PriceTick> ticks = priceTickRepository.findBySymbolAndTsBetween(assetSymbol, from, to);
             if (!ticks.isEmpty()) {
@@ -120,7 +121,6 @@ public class PriceController {
             }
         }
 
-        // 3) Last fallback: MarketTick DB (simulator data)
         if (history.isEmpty()) {
             String marketSymbol = assetSymbol + "/USDT";
             var ticks = marketTickRepository.findByMarketSymbolAndTsBetween(
@@ -132,8 +132,6 @@ public class PriceController {
 
             log.debug("Got {} price points from MarketTick DB for {}", history.size(), assetSymbol);
         }
-
-        // No mock/random data generation - all sources are WhiteBit-driven
         return ResponseEntity.ok(history);
     }
 
